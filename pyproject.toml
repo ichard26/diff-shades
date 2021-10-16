@@ -1,0 +1,44 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "diff-shades"
+authors = [
+    {name = "Richard Si", email = "63936253+ichard26@users.noreply.github.com"}
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+license = {file = "LICENSE.txt"}
+readme = "README.md"
+
+requires-python = ">=3.6.2"
+dependencies = [
+    "click >= 8.0.0",
+    "typing-extensions >= 3.7.4; python_version < '3.8'",
+    "rich",
+    "packaging >= 21.0",
+]
+
+dynamic = ["version", "description"]
+
+[project.scripts]
+diff-shades = "diff_shades.cli:main"
+
+[project.urls]
+Home = "https://github.com/ichard26/diff-shades"
+
+[tool.flit.module]
+name = "diff_shades"
