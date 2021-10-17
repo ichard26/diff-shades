@@ -1,3 +1,5 @@
+import os
+
 import nox
 
 SUPPORTED_PYTHONS = ["3.6", "3.7", "3.8", "3.9", "3.10"]

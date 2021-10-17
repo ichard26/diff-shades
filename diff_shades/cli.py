@@ -16,7 +16,7 @@ import rich.traceback
 
 import diff_shades
 from diff_shades.analysis import GIT_BIN, analyze_projects, setup_projects
-from diff_shades.config import PROJECTS, Project
+from diff_shades.config import PROJECTS
 from diff_shades.output import make_rich_progress
 
 console = rich.get_console()
@@ -32,7 +32,7 @@ def nullcontext(enter_result: T) -> Iterator[T]:
 
 @click.group()
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
-def main():
+def main() -> None:
     """
     The Black shade analyser and comparison tool.
 
@@ -124,8 +124,10 @@ def analyze(
         sys.exit(1)
 
     if repeat_projects_from:
-        data = json.loads(repeat_projects_from.read_text("utf-8"))
-        projects = [Project(**proj.metadata) for proj in AnalysisData(data).projects.values()]
+        pass
+        # TODO: re-implement this feature.
+        # data = json.loads(repeat_projects_from.read_text("utf-8"))
+        # projects = [Project(**proj.metadata) for proj in AnalysisData(data).projects.values()]
     else:
         projects = PROJECTS
 
@@ -151,7 +153,7 @@ def analyze(
         workdir_provider = TemporaryDirectory(prefix="diff-shades-")
 
     with workdir_provider as _work_dir:
-        with make_rich_progress()as progress:
+        with make_rich_progress() as progress:
             setup_task = progress.add_task("[bold blue]Setting up projects", total=len(projects))
             prepped_projects = setup_projects(
                 filtered, Path(_work_dir), progress, setup_task, verbose

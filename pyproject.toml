@@ -27,9 +27,10 @@ readme = "README.md"
 requires-python = ">=3.6.2"
 dependencies = [
     "click >= 8.0.0",
-    "typing-extensions >= 3.7.4; python_version < '3.8'",
-    "rich",
+    "dataclasses >= 0.8; python_version < '3.7'",
     "packaging >= 21.0",
+    "rich",
+    "typing-extensions >= 3.7.4; python_version < '3.8'",
 ]
 
 dynamic = ["version", "description"]
@@ -42,3 +43,11 @@ Home = "https://github.com/ichard26/diff-shades"
 
 [tool.flit.module]
 name = "diff_shades"
+
+[tool.isort]
+profile = "black"
+skip_gitignore = true
+py_version = "36"
+extra_standard_library = ["dataclasses"]
+known_third_party = ["click", "packaging", "rich", "black", "nox"]
+known_first_party = ["diff_shades"]
