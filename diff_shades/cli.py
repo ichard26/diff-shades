@@ -66,7 +66,7 @@ def main() -> None:
 @main.command()
 @click.argument(
     "results-filepath", metavar="results-filepath",
-    type=click.Path(resolve_path=True, path_type=Path)
+    type=click.Path(resolve_path=True, readable=False, writable=True, path_type=Path)
 )
 @click.option(
     "-s", "--select",
@@ -170,6 +170,10 @@ def analyze(
                 prepped_projects, progress, analyze_task, verbose
             )
         results["black-version"] = black.__version__
+        if not console.is_terminal:
+            # Curiously this is needed when redirecting to a file so the next emitted
+            # line isn't attached to the (completed) progress bar.
+            console.line()
 
     with open(results_filepath, "w", encoding="utf-8") as f:
         json.dump(results, f, separators=(",", ":"), ensure_ascii=False)
