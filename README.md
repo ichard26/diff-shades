@@ -1,6 +1,6 @@
 # diff-shades
 
-The Black shade analyser and comparsion tool.
+The Black shade analyser and comparison tool.
 
 AKA Richard's personal take at a better black-primer (by stealing
 ideas from mypy-primer) :p
@@ -13,11 +13,11 @@ Features include:
  - Simple but readable diffing capabilities
  - Repeatable analyses via --repeat-projects-from
  - Structured JSON output
+ - per-project python\_requires support
  - Oh and of course, pretty output!
 
 Potential tasks / additionals:
  - jupyter notebook support
- - per-project python_requires support
  - even more helpful output
  - stronger diffing abilities
  - better UX (particularly when things go wrong)

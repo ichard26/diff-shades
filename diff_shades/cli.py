@@ -2,12 +2,12 @@
 # > Command implementations
 # ============================
 
+import contextlib
 import json
 import sys
-from contextlib import nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional
+from typing import ContextManager, Iterator, List, Optional, TypeVar
 
 import click
 import rich
@@ -17,15 +17,24 @@ import rich.traceback
 import diff_shades
 from diff_shades.analysis import GIT_BIN, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS, Project
+from diff_shades.output import make_rich_progress
 
 console = rich.get_console()
+
+T = TypeVar("T")
+
+
+@contextlib.contextmanager
+def nullcontext(enter_result: T) -> Iterator[T]:
+    # contextlib.nullcontext was only added in 3.7+
+    yield enter_result
 
 
 @click.group()
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
 def main():
     """
-    The Black shade analyser and comparsion tool.
+    The Black shade analyser and comparison tool.
 
     AKA Richard's personal take at a better black-primer (by stealing
     ideas from mypy-primer) :p
@@ -38,13 +47,13 @@ def main():
     Features include:
      - Simple but readable diffing capabilities
      - Repeatable analyses via --repeat-projects-from
+     - Per-project python_requires support
      - Structured JSON output
-     - Oh and of course, pretty output!
+     - Oh and of course, very pretty output!
 
     \b
     Potential tasks / additionals:
      - jupyter notebook support
-     - per-project python_requires support
      - even more helpful output
      - stronger diffing abilities
      - better UX (particularly when things go wrong)
@@ -52,7 +61,6 @@ def main():
     """
     rich.traceback.install(suppress=[click])
     rich.reconfigure(log_path=False)
-    console.hi = False
 
 
 @main.command()
@@ -75,7 +83,7 @@ def main():
     type=click.Path(exists=False, dir_okay=True, file_okay=False, resolve_path=True, path_type=Path),
     help=(
         "Directory where project clones are used / stored. By default a"
-        "temporary directory is used which will be cleaned up at exit."
+        " temporary directory is used which will be cleaned up at exit."
         " Use this option to reuse or cache projects."
     )
 )
@@ -127,7 +135,12 @@ def analyze(
     if select:
         selectors = [project.casefold().strip() for project in select]
         projects = [p for p in projects if p.name in selectors]
-    projects = [p for p in projects if p.supported_by_runtime]
+    filtered = []
+    for proj in projects:
+        if proj.supported_by_runtime:
+            filtered.append(proj)
+        else:
+            console.log(f"[bold yellow]Skipping {proj.name} as it requires python{proj.python_requires}")
 
     workdir_provider: ContextManager
     if work_dir:
@@ -138,20 +151,10 @@ def analyze(
         workdir_provider = TemporaryDirectory(prefix="diff-shades-")
 
     with workdir_provider as _work_dir:
-        setup_progress = rich.progress.Progress(
-            "[progress.description]{task.description}",
-            rich.progress.BarColumn(),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            "•",
-            "[progress.percentage]{task.completed}/{task.total}",
-            "•",
-            rich.progress.TimeElapsedColumn(),
-            console=console,
-        )
-        with setup_progress as progress:
+        with make_rich_progress()as progress:
             setup_task = progress.add_task("[bold blue]Setting up projects", total=len(projects))
             prepped_projects = setup_projects(
-                projects, Path(_work_dir), progress, setup_task, verbose
+                filtered, Path(_work_dir), progress, setup_task, verbose
             )
         if not console.is_terminal:
             # Curiously this is needed when redirecting to a file so the next emitted
@@ -159,23 +162,13 @@ def analyze(
             console.line()
 
         results = {}
-        analyze_progress = rich.progress.Progress(
-            "[progress.description]{task.description}",
-            rich.progress.BarColumn(),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            # "•",
-            # "[progress.percentage]{task.completed}/{task.total}",
-            "•",
-            rich.progress.TimeElapsedColumn(),
-            console=console,
-        )
-        with analyze_progress as progress:
+        with make_rich_progress() as progress:
             analyze_task = progress.add_task("[bold magenta]Running black")
             results["projects"] = analyze_projects(
                 prepped_projects, progress, analyze_task, verbose
             )
         results["black-version"] = black.__version__
 
-    # with open(result_filepath, "w", encoding="utf-8") as f:
-    #     json.dump(results, f, separators=(",", ":"), ensure_ascii=False)
-    #     f.write("\n")
+    with open(results_filepath, "w", encoding="utf-8") as f:
+        json.dump(results, f, separators=(",", ":"), ensure_ascii=False)
+        f.write("\n")

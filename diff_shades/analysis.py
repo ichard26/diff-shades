@@ -1,8 +1,6 @@
-# ====`============================
+# ================================
 # > Formatting results collection
 # =============================
-
-from __future__ import annotations
 
 import dataclasses
 import multiprocessing
@@ -101,7 +99,7 @@ def setup_projects(
             progress.console.log(f"[dim]  commit -> {commit_sha}")
         proj = replace(proj, commit=commit_sha)
         ready.append((proj, target))
-        progress.update(task, advance=1)
+        progress.advance(task)
 
     return ready
 
@@ -114,7 +112,7 @@ def setup_projects(
 
 def get_project_files_and_mode(
     project: Project, path: Path
-) -> Tuple[List[Path], black.FileMode]:
+) -> Tuple[List[Path], "black.FileMode"]:
     import black
 
     files: List[Path] = []
@@ -129,25 +127,23 @@ def get_project_files_and_mode(
         black.main([str(path), *project.custom_arguments, "--check"], standalone_mode=False)
 
     assert files and isinstance(mode, black.FileMode)
-    return sorted([p for p in files if p.suffix in (".py", ".pyi")]), mode
+    return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 
 # TODO: make this a little more reasonable + helpful
 FileResults = Dict[str, str]  # AKA JSON
 
 
-def check_file(path: Path, *, mode: Optional[black.FileMode] = None) -> FileResults:
+def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileResults:
     import black
 
     # TODO: record log files if available
     # TODO: allow more control w/ black.Mode so we could use diff-shades to compare
     # for example, no-ESP vs ESP.
 
-    if mode is None:
-        pyi = (path.suffix == ".pyi")
-        mode = black.FileMode(is_pyi=pyi)
-    else:
-        mode = mode
+    mode = mode or black.FileMode()
+    if path.suffix == ".pyi":
+        mode = replace(mode, is_pyi=True)
 
     src = path.read_text("utf8")
     try:
@@ -156,14 +152,14 @@ def check_file(path: Path, *, mode: Optional[black.FileMode] = None) -> FileResu
         return {"type": "nothing-changed", "src": src}
 
     except Exception as err:
-        return {"type": "failed", "error": err.__class__.__name__, "message": str(err)}
+        return {"type": "failed", "src": src, "error": err.__class__.__name__, "message": str(err)}
 
-    return {"type": "reformatted", "dst": dst}
+    return {"type": "reformatted", "src": src, "dst": dst}
 
 
 def check_file_shim(
     # Unfortunately there's nothing like imap + starmap in multiprocessing.
-    arguments: Tuple[Path, Path, black.FileMode]
+    arguments: Tuple[Path, Path, "black.FileMode"]
 ) -> Tuple[str, FileResults]:
     file, project_path, mode = arguments
     result = check_file(file, mode=mode)
@@ -182,7 +178,7 @@ def analyze_projects(
     progress.update(task, total=file_count)
 
     def check_project_files(
-        files: List[Path], project_path: Path, *, mode: black.FileMode,
+        files: List[Path], project_path: Path, *, mode: "black.FileMode",
     ) -> Dict[str, FileResults]:
         outputs = []
         data_packets = [(file_path, project_path, mode) for file_path in files]
@@ -191,7 +187,7 @@ def analyze_projects(
             result_colour = FILE_RESULTS_COLOURS[result["type"]]
             if verbose:
                 console.log(f"  {filepath}: [{result_colour}]{result['type']}[/]")
-            outputs.append(result)
+            outputs.append(data)
             progress.advance(task)
             progress.advance(project_task)
         return {path: data for (path, data) in outputs}
@@ -199,7 +195,7 @@ def analyze_projects(
     with multiprocessing.Pool() as pool:
         results: Dict[str, Any] = {}
         for (project, path), (files, mode) in zip(projects, files_and_modes):
-            project_task = progress.add_task(f"[bold] -> {project.name}", total=len(files))
+            project_task = progress.add_task(f"[bold] on {project.name}", total=len(files))
             if verbose:
                 console.log(f"[bold]Checking {project.name}[/] ({len(files)} files) ...")
             t0 = time.perf_counter()

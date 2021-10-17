@@ -8,6 +8,11 @@ import os
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Iterator
 
+import rich
+import rich.progress
+
+console = rich.get_console()
+
 # NOTE: These two functions were copied straight from black.output :P
 
 
@@ -50,3 +55,16 @@ def suppress_output() -> Iterator:
     with open(os.devnull, "w", encoding="utf-8") as blackhole:
         with redirect_stdout(blackhole), redirect_stderr(blackhole):
             yield
+
+
+def make_rich_progress() -> rich.progress.Progress:
+    return rich.progress.Progress(
+        "[progress.description]{task.description}",
+        rich.progress.BarColumn(),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        "•",
+        "[progress.percentage]{task.completed}/{task.total}",
+        "•",
+        rich.progress.TimeElapsedColumn(),
+        console=console,
+    )
