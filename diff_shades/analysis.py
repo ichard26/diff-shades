@@ -77,7 +77,6 @@ def setup_projects(
 ) -> List[Tuple[Project, Path]]:
     ready = []
     for proj in projects:
-        progress.update(task, current=proj.name)
         target = Path(workdir, proj.name)
         can_reuse = False
         if target.exists():
@@ -88,10 +87,10 @@ def setup_projects(
                 can_reuse = (proj.commit == sha)
 
         if can_reuse:
-            progress.console.log(f"[bold]Using pre-existing clone of {proj.name} \[{proj.url}]")
+            progress.console.log(f"[bold]Using pre-existing clone of {proj.name}[/] \[{proj.url}]")
         else:
             clone_repo(proj.url, to=target, sha=proj.commit)
-            progress.console.log(f"[bold]Cloned {proj.name} \[{proj.url}]")
+            progress.console.log(f"[bold]Cloned {proj.name}[/] \[{proj.url}]")
 
         commit_sha, commit_msg = get_commit(target)
         if verbose:
@@ -180,17 +179,16 @@ def analyze_projects(
     def check_project_files(
         files: List[Path], project_path: Path, *, mode: "black.FileMode",
     ) -> Dict[str, FileResults]:
-        outputs = []
+        file_results = {}
         data_packets = [(file_path, project_path, mode) for file_path in files]
-        for data in pool.imap(check_file_shim, data_packets):
-            filepath, result = data
+        for (filepath, result) in pool.imap(check_file_shim, data_packets):
             result_colour = FILE_RESULTS_COLOURS[result["type"]]
             if verbose:
                 console.log(f"  {filepath}: [{result_colour}]{result['type']}[/]")
-            outputs.append(data)
+            file_results[filepath] = result
             progress.advance(task)
             progress.advance(project_task)
-        return {path: data for (path, data) in outputs}
+        return file_results
 
     with multiprocessing.Pool() as pool:
         results: Dict[str, Any] = {}
@@ -203,7 +201,7 @@ def analyze_projects(
             results[project.name]["metadata"] = dataclasses.asdict(project)
             results[project.name]["files"] = check_project_files(files, path, mode=mode)
             elapsed = time.perf_counter() - t0
-            console.log(f"[bold]{project.name} finished[/] (took {elapsed:.3f} seconds)")
+            console.log(f"[bold]{project.name} finished[/] (in {elapsed:.3f} seconds)")
             progress.remove_task(project_task)
 
     return results
