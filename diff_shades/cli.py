@@ -13,11 +13,19 @@ from typing import ContextManager, Iterator, List, Optional, TypeVar
 
 import click
 import rich
-import rich.progress
 import rich.traceback
+from rich.panel import Panel
+from rich.table import Table
 
 import diff_shades
-from diff_shades.analysis import GIT_BIN, AnalysisData, analyze_projects, setup_projects
+from diff_shades.analysis import (
+    FILE_RESULT_COLORS,
+    GIT_BIN,
+    AnalysisData,
+    analyze_projects,
+    filter_results,
+    setup_projects,
+)
 from diff_shades.config import PROJECTS
 from diff_shades.output import make_rich_progress
 
@@ -189,3 +197,30 @@ def analyze(
         raw = dataclasses.asdict(analysis)
         json.dump(raw, f, separators=(",", ":"), ensure_ascii=False)
         f.write("\n")
+
+    console.line()
+    main_table = Table.grid()
+    file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
+    file_table.add_column("Result")
+    file_table.add_column("# of files")
+    for type in ("nothing-changed", "reformatted", "failed"):
+        count = len(filter_results(analysis.files, type))
+        file_table.add_row(type, str(count), style=FILE_RESULT_COLORS[type])
+    project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
+    project_table.add_column("Result")
+    project_table.add_column("# of projects")
+    for type in ("nothing-changed", "reformatted", "failed"):
+        if type == "nothing-changed":
+            count = sum(
+                proj.results == filter_results(proj.results, type) for proj in analysis
+            )
+        else:
+            count = sum(bool(filter_results(proj.results, type)) for proj in analysis)
+        project_table.add_row(type, str(count), style=FILE_RESULT_COLORS[type])
+    main_table.add_row(file_table, "   ", project_table)
+    main_table.add_row(
+        f"\n[bold]# of files: {len(analysis.files)}\n"
+        f"[bold]# of projects: {len(analysis.projects)}"
+    )
+    panel = Panel(main_table, title="[bold]Summary", expand=False)
+    console.print(panel)

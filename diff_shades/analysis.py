@@ -39,7 +39,7 @@ from diff_shades.config import Project
 from diff_shades.output import suppress_output
 
 GIT_BIN: Final = shutil.which("git")
-FILE_RESULTS_COLOURS: Final = {
+FILE_RESULT_COLORS: Final = {
     "reformatted": "cyan",
     "nothing-changed": "magenta",
     "failed": "red",
@@ -133,18 +133,18 @@ class AnalysisData:
 
 @overload
 def filter_results(
-    file_results: Dict[str, FileResult], type: ResultTypes
+    file_results: Dict[str, FileResult], type: str
 ) -> Dict[str, FileResult]:
     ...
 
 
 @overload
-def filter_results(file_results: List[FileResult], type: ResultTypes) -> List[FileResult]:
+def filter_results(file_results: List[FileResult], type: str) -> List[FileResult]:
     ...
 
 
 def filter_results(
-    file_results: Union[Dict[str, FileResult], List[FileResult]], type: ResultTypes
+    file_results: Union[Dict[str, FileResult], List[FileResult]], type: str
 ) -> Union[Dict[str, FileResult], List[FileResult]]:
     if isinstance(file_results, list):
         return [result for result in file_results if result.type == type]
@@ -299,7 +299,7 @@ def analyze_projects(
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
             if verbose:
-                result_colour = FILE_RESULTS_COLOURS[result.type]
+                result_colour = FILE_RESULT_COLORS[result.type]
                 console.log(f"  {filepath}: [{result_colour}]{result.type}")
             file_results[filepath] = result
             progress.advance(task)
@@ -313,7 +313,7 @@ def analyze_projects(
                 f"[bold] on {project.name}", total=len(files)
             )
             if verbose:
-                console.log(f"[bold]Checking {project.name}[/] ({len(files)} files) ...")
+                console.log(f"[bold]Checking {project.name}[/] ({len(files)} files)")
             t0 = time.perf_counter()
             file_results = check_project_files(files, path, mode=mode)
             results[project.name] = ProjectData(results=file_results, project=project)
