@@ -14,6 +14,7 @@ def tests(session: nox.Session) -> None:
     session.run("diff-shades", "--version")
     session.install("black")
     target = Path(session.create_tmp(), "fake-devnull")
+    cache = Path(session.create_tmp(), "cache")
     base = ["diff-shades", "analyze", str(target)]
-    session.run(*base, "-s", "blackbench", "-w", "cache")
-    session.run(*base, "-s", "blackbench", "-s", "black", "-w", "cache")
+    session.run(*base, "-s", "blackbench", "-w", str(cache))
+    session.run(*base, "-s", "blackbench", "-s", "black", "-w", str(cache))
