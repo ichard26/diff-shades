@@ -33,8 +33,9 @@ def nullcontext(enter_result: T) -> Iterator[T]:
 
 
 @click.group()
+@click.option("--force-color", is_flag=True, help="Force colored output.")
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
-def main() -> None:
+def main(force_color: bool) -> None:
     """
     The Black shade analyser and comparison tool.
 
@@ -63,6 +64,8 @@ def main() -> None:
     """
     rich.traceback.install(suppress=[click], show_locals=True)
     rich.reconfigure(log_path=False)
+    if force_color:
+        rich.reconfigure(log_path=False, color_system="truecolor")
 
 
 # fmt: off
