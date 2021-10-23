@@ -3,8 +3,10 @@
 # ============================
 
 import contextlib
+import dataclasses
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ContextManager, Iterator, List, Optional, TypeVar
@@ -15,7 +17,7 @@ import rich.progress
 import rich.traceback
 
 import diff_shades
-from diff_shades.analysis import GIT_BIN, analyze_projects, setup_projects
+from diff_shades.analysis import GIT_BIN, AnalysisData, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
 from diff_shades.output import make_rich_progress
 
@@ -59,7 +61,7 @@ def main() -> None:
      - better UX (particularly when things go wrong)
      - so much code cleanup - like a lot :p
     """
-    rich.traceback.install(suppress=[click])
+    rich.traceback.install(suppress=[click], show_locals=True)
     rich.reconfigure(log_path=False)
 
 
@@ -124,10 +126,8 @@ def analyze(
         sys.exit(1)
 
     if repeat_projects_from:
-        pass
-        # TODO: re-implement this feature.
-        # data = json.loads(repeat_projects_from.read_text("utf-8"))
-        # projects = [Project(**proj.metadata) for proj in AnalysisData(data).projects.values()]
+        data = json.loads(repeat_projects_from.read_text("utf-8"))
+        projects = [proj_data.project for proj_data in AnalysisData.load(data)]
     else:
         projects = PROJECTS
 
@@ -163,18 +163,20 @@ def analyze(
             # line isn't attached to the (completed) progress bar.
             console.line()
 
-        results = {}
         with make_rich_progress() as progress:
             analyze_task = progress.add_task("[bold magenta]Running black")
-            results["projects"] = analyze_projects(
-                prepped_projects, progress, analyze_task, verbose
-            )
-        results["black-version"] = black.__version__
+            results = analyze_projects(prepped_projects, progress, analyze_task, verbose)
+        metadata = {
+            "black_version": black.__version__,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        analysis = AnalysisData(projects=results, metadata=metadata)
         if not console.is_terminal:
             # Curiously this is needed when redirecting to a file so the next emitted
             # line isn't attached to the (completed) progress bar.
             console.line()
 
     with open(results_filepath, "w", encoding="utf-8") as f:
-        json.dump(results, f, separators=(",", ":"), ensure_ascii=False)
+        raw = dataclasses.asdict(analysis)
+        json.dump(raw, f, separators=(",", ":"), ensure_ascii=False)
         f.write("\n")

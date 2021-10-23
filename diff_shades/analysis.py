@@ -11,13 +11,23 @@ import time
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    overload,
+)
 from unittest.mock import patch
 
 if sys.version_info >= (3, 8):
-    from typing import Final
+    from typing import Final, Literal
 else:
-    from typing_extensions import Final
+    from typing_extensions import Final, Literal
 
 if TYPE_CHECKING:
     import black
@@ -42,6 +52,107 @@ run_cmd: Final = partial(
     stderr=subprocess.STDOUT
 )
 console: Final = rich.get_console()
+
+# ============================================
+# > Analysis data representation & processing
+# ==========================================
+
+JSON = Any
+ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class FileResult:
+    type: ResultTypes
+    src: str
+
+
+@dataclasses.dataclass(frozen=True)
+class NothingChangedResult(FileResult):
+    type: Literal["nothing-changed"] = dataclasses.field(default="nothing-changed", init=False)
+
+
+@dataclasses.dataclass(frozen=True)
+class ReformattedResult(FileResult):
+    type: Literal["reformatted"] = dataclasses.field(default="reformatted", init=False)
+    dst: str
+
+
+@dataclasses.dataclass(frozen=True)
+class FailedResult(FileResult):
+    type: Literal["failed"] = dataclasses.field(default="failed", init=False)
+    error: str
+    message: str
+
+
+@dataclasses.dataclass
+class ProjectData:
+    results: Dict[str, FileResult]
+    project: Project
+
+
+@dataclasses.dataclass
+class AnalysisData:
+    projects: Dict[str, ProjectData]
+    metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    @classmethod
+    def load(cls, data: JSON) -> "AnalysisData":
+        projects = {}
+        for name, project_data in data["projects"].items():
+            files: Dict[str, FileResult] = {}
+            for filepath, result in project_data["files"].items():
+                if result["type"] == "reformatted":
+                    files[filepath] = ReformattedResult(src=result["src"], dst=result["dst"])
+                elif result["type"] == "nothing-changed":
+                    files[filepath] = NothingChangedResult(src=result["src"])
+                elif result["type"] == "failed":
+                    files[filepath] = FailedResult(
+                        src=result["src"], error=result["error"], message=result["message"]
+                    )
+            project_definition = Project(**project_data["project"])
+            projects[name] = ProjectData(results=files, project=project_definition)
+
+        return cls(projects=projects, metadata=data["metadata"])
+
+    def __iter__(self) -> Iterator[ProjectData]:
+        return iter(self.projects.values())
+
+    @property
+    def files(self) -> Dict[str, FileResult]:
+        files = {}
+        for proj_data in self.projects.values():
+            for file, result in proj_data.results.items():
+                files[file] = result
+        return files
+
+
+@overload
+def filter_results(
+    file_results: Dict[str, FileResult], type: ResultTypes
+) -> Dict[str, FileResult]:
+    ...
+
+
+@overload
+def filter_results(
+    file_results: List[FileResult], type: ResultTypes
+) -> List[FileResult]:
+    ...
+
+
+def filter_results(
+    file_results: Union[Dict[str, FileResult], List[FileResult]], type: ResultTypes
+) -> Union[Dict[str, FileResult], List[FileResult]]:
+    if isinstance(file_results, list):
+        return [result for result in file_results if result.type == type]
+    else:
+        return {file: result for file, result in file_results.items() if result.type == type}
+
+
+# =====================
+# > Setup and analysis
+# ==================
 
 
 def clone_repo(url: str, *, to: Path, sha: Optional[str] = None) -> None:
@@ -129,11 +240,7 @@ def get_project_files_and_mode(
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 
-# TODO: make this a little more reasonable + helpful
-FileResults = Dict[str, str]  # AKA JSON
-
-
-def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileResults:
+def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileResult:
     import black
 
     # TODO: record log files if available
@@ -148,18 +255,18 @@ def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileRe
     try:
         dst = black.format_file_contents(src, fast=False, mode=mode)
     except black.NothingChanged:
-        return {"type": "nothing-changed", "src": src}
+        return NothingChangedResult(src=src)
 
     except Exception as err:
-        return {"type": "failed", "src": src, "error": err.__class__.__name__, "message": str(err)}
+        return FailedResult(src=src, error=err.__class__.__name__, message=str(err))
 
-    return {"type": "reformatted", "src": src, "dst": dst}
+    return ReformattedResult(src=src, dst=dst)
 
 
 def check_file_shim(
     # Unfortunately there's nothing like imap + starmap in multiprocessing.
     arguments: Tuple[Path, Path, "black.FileMode"]
-) -> Tuple[str, FileResults]:
+) -> Tuple[str, FileResult]:
     file, project_path, mode = arguments
     result = check_file(file, mode=mode)
     normalized_path = file.relative_to(project_path).as_posix()
@@ -171,35 +278,34 @@ def analyze_projects(
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
     verbose: bool,
-) -> Dict[str, Any]:
+) -> Dict[str, ProjectData]:
     files_and_modes = [get_project_files_and_mode(proj, path) for proj, path in projects]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)
 
     def check_project_files(
         files: List[Path], project_path: Path, *, mode: "black.FileMode",
-    ) -> Dict[str, FileResults]:
+    ) -> Dict[str, FileResult]:
         file_results = {}
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
-            result_colour = FILE_RESULTS_COLOURS[result["type"]]
             if verbose:
-                console.log(f"  {filepath}: [{result_colour}]{result['type']}[/]")
+                result_colour = FILE_RESULTS_COLOURS[result.type]
+                console.log(f"  {filepath}: [{result_colour}]{result.type}")
             file_results[filepath] = result
             progress.advance(task)
             progress.advance(project_task)
         return file_results
 
     with multiprocessing.Pool() as pool:
-        results: Dict[str, Any] = {}
+        results = {}
         for (project, path), (files, mode) in zip(projects, files_and_modes):
             project_task = progress.add_task(f"[bold] on {project.name}", total=len(files))
             if verbose:
                 console.log(f"[bold]Checking {project.name}[/] ({len(files)} files) ...")
             t0 = time.perf_counter()
-            results[project.name] = {}
-            results[project.name]["metadata"] = dataclasses.asdict(project)
-            results[project.name]["files"] = check_project_files(files, path, mode=mode)
+            file_results = check_project_files(files, path, mode=mode)
+            results[project.name] = ProjectData(results=file_results, project=project)
             elapsed = time.perf_counter() - t0
             console.log(f"[bold]{project.name} finished[/] (in {elapsed:.3f} seconds)")
             progress.remove_task(project_task)
