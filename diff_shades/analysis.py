@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import replace
+from dataclasses import field, replace
 from functools import partial
 from pathlib import Path
 from typing import (
@@ -42,14 +42,14 @@ GIT_BIN: Final = shutil.which("git")
 FILE_RESULTS_COLOURS: Final = {
     "reformatted": "cyan",
     "nothing-changed": "magenta",
-    "failed": "red"
+    "failed": "red",
 }
 run_cmd: Final = partial(
     subprocess.run,
     check=True,
     encoding="utf8",
     stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT
+    stderr=subprocess.STDOUT,
 )
 console: Final = rich.get_console()
 
@@ -69,18 +69,18 @@ class FileResult:
 
 @dataclasses.dataclass(frozen=True)
 class NothingChangedResult(FileResult):
-    type: Literal["nothing-changed"] = dataclasses.field(default="nothing-changed", init=False)
+    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
 
 
 @dataclasses.dataclass(frozen=True)
 class ReformattedResult(FileResult):
-    type: Literal["reformatted"] = dataclasses.field(default="reformatted", init=False)
+    type: Literal["reformatted"] = field(default="reformatted", init=False)
     dst: str
 
 
 @dataclasses.dataclass(frozen=True)
 class FailedResult(FileResult):
-    type: Literal["failed"] = dataclasses.field(default="failed", init=False)
+    type: Literal["failed"] = field(default="failed", init=False)
     error: str
     message: str
 
@@ -103,12 +103,16 @@ class AnalysisData:
             files: Dict[str, FileResult] = {}
             for filepath, result in project_data["files"].items():
                 if result["type"] == "reformatted":
-                    files[filepath] = ReformattedResult(src=result["src"], dst=result["dst"])
+                    files[filepath] = ReformattedResult(
+                        src=result["src"], dst=result["dst"]
+                    )
                 elif result["type"] == "nothing-changed":
                     files[filepath] = NothingChangedResult(src=result["src"])
                 elif result["type"] == "failed":
                     files[filepath] = FailedResult(
-                        src=result["src"], error=result["error"], message=result["message"]
+                        src=result["src"],
+                        error=result["error"],
+                        message=result["message"],
                     )
             project_definition = Project(**project_data["project"])
             projects[name] = ProjectData(results=files, project=project_definition)
@@ -135,9 +139,7 @@ def filter_results(
 
 
 @overload
-def filter_results(
-    file_results: List[FileResult], type: ResultTypes
-) -> List[FileResult]:
+def filter_results(file_results: List[FileResult], type: ResultTypes) -> List[FileResult]:
     ...
 
 
@@ -147,7 +149,9 @@ def filter_results(
     if isinstance(file_results, list):
         return [result for result in file_results if result.type == type]
     else:
-        return {file: result for file, result in file_results.items() if result.type == type}
+        return {
+            file: result for file, result in file_results.items() if result.type == type
+        }
 
 
 # =====================
@@ -195,10 +199,12 @@ def setup_projects(
                 can_reuse = True
             else:
                 sha, _ = get_commit(target)
-                can_reuse = (proj.commit == sha)
+                can_reuse = proj.commit == sha
 
         if can_reuse:
-            progress.console.log(f"[bold]Using pre-existing clone of {proj.name}[/] \[{proj.url}]")
+            progress.console.log(
+                f"[bold]Using pre-existing clone of {proj.name}[/] \[{proj.url}]"
+            )
         else:
             clone_repo(proj.url, to=target, sha=proj.commit)
             progress.console.log(f"[bold]Cloned {proj.name}[/] \[{proj.url}]")
@@ -234,7 +240,9 @@ def get_project_files_and_mode(
         mode = kwargs["mode"]
 
     with suppress_output(), patch("black.reformat_many", new=shim):
-        black.main([str(path), *project.custom_arguments, "--check"], standalone_mode=False)
+        black.main(
+            [str(path), *project.custom_arguments, "--check"], standalone_mode=False
+        )
 
     assert files and isinstance(mode, black.FileMode)
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
@@ -279,12 +287,13 @@ def analyze_projects(
     task: rich.progress.TaskID,
     verbose: bool,
 ) -> Dict[str, ProjectData]:
+    # TODO: refactor this and related functions cuz it's a bit of a mess :)
     files_and_modes = [get_project_files_and_mode(proj, path) for proj, path in projects]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)
 
     def check_project_files(
-        files: List[Path], project_path: Path, *, mode: "black.FileMode",
+        files: List[Path], project_path: Path, *, mode: "black.FileMode"
     ) -> Dict[str, FileResult]:
         file_results = {}
         data_packets = [(file_path, project_path, mode) for file_path in files]
@@ -300,7 +309,9 @@ def analyze_projects(
     with multiprocessing.Pool() as pool:
         results = {}
         for (project, path), (files, mode) in zip(projects, files_and_modes):
-            project_task = progress.add_task(f"[bold] on {project.name}", total=len(files))
+            project_task = progress.add_task(
+                f"[bold] on {project.name}", total=len(files)
+            )
             if verbose:
                 console.log(f"[bold]Checking {project.name}[/] ({len(files)} files) ...")
             t0 = time.perf_counter()

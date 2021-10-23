@@ -65,6 +65,7 @@ def main() -> None:
     rich.reconfigure(log_path=False)
 
 
+# fmt: off
 @main.command()
 @click.argument(
     "results-filepath", metavar="results-filepath",
@@ -103,13 +104,14 @@ def main() -> None:
     is_flag=True,
     help="Be more verbose."
 )
+# fmt: on
 def analyze(
     results_filepath: Path,
     select: List[str],
     exclude: List[str],
     work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
-    verbose: bool
+    verbose: bool,
 ) -> None:
     """Run Black against 'millions' of LOC and save the results."""
 
@@ -142,7 +144,9 @@ def analyze(
         if proj.supported_by_runtime:
             filtered.append(proj)
         else:
-            console.log(f"[bold yellow]Skipping {proj.name} as it requires python{proj.python_requires}")
+            console.log(
+                f"[bold yellow]Skipping {proj.name} as it requires python{proj.python_requires}"
+            )
 
     workdir_provider: ContextManager
     if work_dir:
@@ -154,7 +158,9 @@ def analyze(
 
     with workdir_provider as _work_dir:
         with make_rich_progress() as progress:
-            setup_task = progress.add_task("[bold blue]Setting up projects", total=len(projects))
+            setup_task = progress.add_task(
+                "[bold blue]Setting up projects", total=len(projects)
+            )
             prepped_projects = setup_projects(
                 filtered, Path(_work_dir), progress, setup_task, verbose
             )
@@ -168,7 +174,7 @@ def analyze(
             results = analyze_projects(prepped_projects, progress, analyze_task, verbose)
         metadata = {
             "black_version": black.__version__,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         analysis = AnalysisData(projects=results, metadata=metadata)
         if not console.is_terminal:

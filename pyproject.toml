@@ -44,6 +44,10 @@ Home = "https://github.com/ichard26/diff-shades"
 [tool.flit.module]
 name = "diff_shades"
 
+[tool.black]
+line-length = 90
+target-version = ["py36", "py37", "py38", "py39"]
+
 [tool.isort]
 profile = "black"
 skip_gitignore = true

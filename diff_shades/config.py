@@ -39,13 +39,18 @@ PROJECTS: Final = [
     Project("blackbench", "https://github.com/ichard26/blackbench.git"),
     Project("channel", "https://github.com/django/channels.git"),
     Project(
-        "django", "https://github.com/django/django.git",
+        "django",
+        "https://github.com/django/django.git",
         custom_arguments=[
             "--skip-string-normalization",
             "--extend-exclude",
-            "/((docs|scripts)/|django/forms/models.py|tests/gis_tests/test_spatialrefsys.py|tests/test_runner_apps/tagged/tests_syntax_error.py)"
+            (
+                "/((docs|scripts)/|django/forms/models.py"
+                "|tests/gis_tests/test_spatialrefsys.py"
+                "|tests/test_runner_apps/tagged/tests_syntax_error.py)"
+            ),
         ],
-        python_requires=">=3.8"
+        python_requires=">=3.8",
     ),
     Project("flake8-bugbear", "https://github.com/PyCQA/flake8-bugbear.git"),
     Project("hypothesis", "https://github.com/HypothesisWorks/hypothesis.git"),
@@ -61,7 +66,7 @@ PROJECTS: Final = [
     Project("tox", "https://github.com/tox-dev/tox.git"),
     Project("typeshed", "https://github.com/python/typeshed.git"),
     Project("virtualenv", "https://github.com/pypa/virtualenv.git"),
-    Project("warehouse", "https://github.com/pypa/warehouse.git")
+    Project("warehouse", "https://github.com/pypa/warehouse.git"),
 ]
 for p in PROJECTS:
     if p.custom_arguments is None:
