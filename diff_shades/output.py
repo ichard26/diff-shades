@@ -62,9 +62,9 @@ def make_rich_progress() -> rich.progress.Progress:
         "[progress.description]{task.description}",
         rich.progress.BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
-        "•",
+        "-",
         "[progress.percentage]{task.completed}/{task.total}",
-        "•",
+        "-",
         rich.progress.TimeElapsedColumn(),
         console=console,
     )
