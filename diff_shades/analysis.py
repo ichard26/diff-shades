@@ -123,11 +123,10 @@ class AnalysisData:
         return iter(self.projects.values())
 
     @property
-    def files(self) -> Dict[str, FileResult]:
-        files = {}
+    def files(self) -> List[FileResult]:
+        files: List[FileResult] = []
         for proj_data in self.projects.values():
-            for file, result in proj_data.results.items():
-                files[file] = result
+            files.extend(proj_data.results.values())
         return files
 
 
