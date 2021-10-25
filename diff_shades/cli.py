@@ -224,3 +224,50 @@ def analyze(
     )
     panel = Panel(main_table, title="[bold]Summary", expand=False)
     console.print(panel)
+
+
+@main.command()
+@click.argument(
+    "analysis-one",
+    metavar="analysis-one",
+    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
+)
+@click.argument(
+    "analysis-two",
+    metavar="analysis-two",
+    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
+)
+@click.option(
+    "--check", is_flag=True, help="Return a non-zero exit code if differences were found."
+)
+def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
+    """Compare two analyses for differences in the results."""
+
+    # TODO: allow filtering of projects and files checked
+    # TODO: more informative output (in particular on the differences)
+
+    first = AnalysisData.load(json.loads(analysis_one.read_text("utf-8")))
+    console.log(f"Loaded first analysis: {analysis_one}")
+    second = AnalysisData.load(json.loads(analysis_two.read_text("utf-8")))
+    console.log(f"Loaded second analysis: {analysis_two}")
+
+    # TODO: Gracefully warn but accept analyses that weren't set up the exact same way.
+    # fmt: off
+    if (
+        set(first.projects) ^ set(second.projects)
+        or not all(x.project == y.project for x, y in zip(first, second))
+    ):
+    # fmt: on
+        console.print("[bold red]\nThe two analyses don't have the same set of projects.")
+        console.print(
+            "[italic]-> Eventually this will be just a warning, but that's a TODO"
+        )
+        sys.exit(1)
+
+    console.line()
+    if first == second:
+        console.print(f"[bold {FILE_RESULT_COLORS['nothing-changed']}]Nothing-changed.")
+        sys.exit(0)
+    else:
+        console.print(f"[bold {FILE_RESULT_COLORS['reformatted']}]Differences found.")
+        sys.exit(1 if check else 0)

@@ -15,7 +15,7 @@ else:
 from packaging.specifiers import SpecifierSet
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(eq=True)
 class Project:
     name: str
     url: str

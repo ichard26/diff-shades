@@ -101,7 +101,7 @@ class AnalysisData:
         projects = {}
         for name, project_data in data["projects"].items():
             files: Dict[str, FileResult] = {}
-            for filepath, result in project_data["files"].items():
+            for filepath, result in project_data["results"].items():
                 if result["type"] == "reformatted":
                     files[filepath] = ReformattedResult(
                         src=result["src"], dst=result["dst"]
