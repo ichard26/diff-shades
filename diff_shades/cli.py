@@ -9,7 +9,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Iterator, List, Optional, TypeVar
+from typing import ContextManager, Iterator, Optional, Set, TypeVar
 
 import click
 import rich
@@ -79,17 +79,19 @@ def main(force_color: bool) -> None:
 # fmt: off
 @main.command()
 @click.argument(
-    "results-filepath", metavar="results-filepath",
+    "results-path", metavar="results-filepath",
     type=click.Path(resolve_path=True, readable=False, writable=True, path_type=Path)
 )
 @click.option(
     "-s", "--select",
     multiple=True,
+    callback=lambda ctx, param, values: set(p.strip().casefold() for p in values),
     help="Select projects from the main list."
 )
 @click.option(
     "-e", "--exclude",
     multiple=True,
+    callback=lambda ctx, param, values: set(p.strip().casefold() for p in values),
     help="Exclude projects from running."
 )
 @click.option(
@@ -117,9 +119,9 @@ def main(force_color: bool) -> None:
 )
 # fmt: on
 def analyze(
-    results_filepath: Path,
-    select: List[str],
-    exclude: List[str],
+    results_path: Path,
+    select: Set[str],
+    exclude: Set[str],
     work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
     verbose: bool,
@@ -138,17 +140,12 @@ def analyze(
         console.print("[bold]-> This command requires git sadly enough.")
         sys.exit(1)
 
-    if results_filepath.exists():
-        if results_filepath.is_file():
-            console.log(
-                f"[yellow bold]Overwriting {results_filepath} as it already exists!"
-            )
-        elif results_filepath.is_dir():
-            console.print(f"[red bold]{results_filepath} is a pre-existing directory.")
-            console.print(
-                "[bold]-> Can't continue as I won't be overwriting a directory."
-            )
-            sys.exit(1)
+    if results_path.exists() and results_path.is_file():
+        console.log(f"[yellow bold]Overwriting {results_path} as it already exists!")
+    elif results_path.exists() and results_path.is_dir():
+        console.print(f"[red bold]{results_path} is a pre-existing directory.")
+        console.print("[bold]-> Can't continue as I won't overwrite a directory.")
+        sys.exit(1)
 
     if repeat_projects_from:
         data = json.loads(repeat_projects_from.read_text("utf-8"))
@@ -156,19 +153,15 @@ def analyze(
     else:
         projects = PROJECTS
 
-    if exclude:
-        excluders = [e.casefold().strip() for e in exclude]
-        projects = [p for p in projects if p.name not in excluders]
+    projects = [p for p in projects if p.name not in exclude]
     if select:
-        selectors = [project.casefold().strip() for project in select]
-        projects = [p for p in projects if p.name in selectors]
-    filtered = []
+        projects = [p for p in projects if p.name in select]
     for proj in projects:
-        if proj.supported_by_runtime:
-            filtered.append(proj)
-        else:
+        if not proj.supported_by_runtime:
+            projects.remove(proj)
             console.log(
-                f"[bold yellow]Skipping {proj.name} as it requires python{proj.python_requires}"
+                "[bold yellow]"
+                f"Skipping {proj.name} as it requires python{proj.python_requires}"
             )
 
     workdir_provider: ContextManager
@@ -185,7 +178,7 @@ def analyze(
                 "[bold blue]Setting up projects", total=len(projects)
             )
             prepped_projects = setup_projects(
-                filtered, Path(_work_dir), progress, setup_task, verbose
+                projects, Path(_work_dir), progress, setup_task, verbose
             )
         if not console.is_terminal:
             # Curiously this is needed when redirecting to a file so the next emitted
@@ -205,7 +198,7 @@ def analyze(
             # line isn't attached to the (completed) progress bar.
             console.line()
 
-    with open(results_filepath, "w", encoding="utf-8") as f:
+    with open(results_path, "w", encoding="utf-8") as f:
         raw = dataclasses.asdict(analysis)
         json.dump(raw, f, separators=(",", ":"), ensure_ascii=False)
         f.write("\n")
