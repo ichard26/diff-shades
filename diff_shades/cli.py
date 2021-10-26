@@ -138,6 +138,18 @@ def analyze(
         console.print("[bold]-> This command requires git sadly enough.")
         sys.exit(1)
 
+    if results_filepath.exists():
+        if results_filepath.is_file():
+            console.log(
+                f"[yellow bold]Overwriting {results_filepath} as it already exists!"
+            )
+        elif results_filepath.is_dir():
+            console.print(f"[red bold]{results_filepath} is a pre-existing directory.")
+            console.print(
+                "[bold]-> Can't continue as I won't be overwriting a directory."
+            )
+            sys.exit(1)
+
     if repeat_projects_from:
         data = json.loads(repeat_projects_from.read_text("utf-8"))
         projects = [proj_data.project for proj_data in AnalysisData.load(data)]

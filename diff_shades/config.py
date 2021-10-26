@@ -52,6 +52,7 @@ PROJECTS: Final = [
         ],
         python_requires=">=3.8",
     ),
+    Project("diff-shades", "https://github.com/ichard26/diff-shades.git"),
     Project("flake8-bugbear", "https://github.com/PyCQA/flake8-bugbear.git"),
     Project("hypothesis", "https://github.com/HypothesisWorks/hypothesis.git"),
     Project("pandas", "https://github.com/pandas-dev/pandas.git"),
