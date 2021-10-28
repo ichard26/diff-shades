@@ -21,7 +21,7 @@ import diff_shades
 from diff_shades.analysis import (
     FILE_RESULT_COLORS,
     GIT_BIN,
-    AnalysisData,
+    Analysis,
     analyze_projects,
     filter_results,
     setup_projects,
@@ -149,7 +149,7 @@ def analyze(
 
     if repeat_projects_from:
         data = json.loads(repeat_projects_from.read_text("utf-8"))
-        projects = [proj_data.project for proj_data in AnalysisData.load(data)]
+        projects = list(Analysis.load(data).projects.values())
     else:
         projects = PROJECTS
 
@@ -173,13 +173,12 @@ def analyze(
         workdir_provider = TemporaryDirectory(prefix="diff-shades-")
 
     with workdir_provider as _work_dir:
+        work_dir = Path(_work_dir)
         with make_rich_progress() as progress:
             setup_task = progress.add_task(
                 "[bold blue]Setting up projects", total=len(projects)
             )
-            prepped_projects = setup_projects(
-                projects, Path(_work_dir), progress, setup_task, verbose
-            )
+            projects = setup_projects(projects, work_dir, progress, setup_task, verbose)
         if not console.is_terminal:
             # Curiously this is needed when redirecting to a file so the next emitted
             # line isn't attached to the (completed) progress bar.
@@ -187,12 +186,18 @@ def analyze(
 
         with make_rich_progress() as progress:
             analyze_task = progress.add_task("[bold magenta]Running black")
-            results = analyze_projects(prepped_projects, progress, analyze_task, verbose)
+            results = analyze_projects(
+                projects, work_dir, progress, analyze_task, verbose
+            )
         metadata = {
             "black_version": black.__version__,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        analysis = AnalysisData(projects=results, metadata=metadata)
+        analysis = Analysis(
+            projects={proj.name: proj for proj in projects},
+            results=results,
+            metadata=metadata,
+        )
         if not console.is_terminal:
             # Curiously this is needed when redirecting to a file so the next emitted
             # line isn't attached to the (completed) progress bar.
@@ -216,11 +221,9 @@ def analyze(
     project_table.add_column("# of projects")
     for type in ("nothing-changed", "reformatted", "failed"):
         if type == "nothing-changed":
-            count = sum(
-                proj.results == filter_results(proj.results, type) for proj in analysis
-            )
+            count = sum(proj == filter_results(proj, type) for proj in analysis)
         else:
-            count = sum(bool(filter_results(proj.results, type)) for proj in analysis)
+            count = sum(bool(filter_results(proj, type)) for proj in analysis)
         project_table.add_row(type, str(count), style=FILE_RESULT_COLORS[type])
     main_table.add_row(file_table, "   ", project_table)
     main_table.add_row(
@@ -251,18 +254,13 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     # TODO: allow filtering of projects and files checked
     # TODO: more informative output (in particular on the differences)
 
-    first = AnalysisData.load(json.loads(analysis_one.read_text("utf-8")))
+    first = Analysis.load(json.loads(analysis_one.read_text("utf-8")))
     console.log(f"Loaded first analysis: {analysis_one}")
-    second = AnalysisData.load(json.loads(analysis_two.read_text("utf-8")))
+    second = Analysis.load(json.loads(analysis_two.read_text("utf-8")))
     console.log(f"Loaded second analysis: {analysis_two}")
 
     # TODO: Gracefully warn but accept analyses that weren't set up the exact same way.
-    # fmt: off
-    if (
-        set(first.projects) ^ set(second.projects)
-        or not all(x.project == y.project for x, y in zip(first, second))
-    ):
-    # fmt: on
+    if not all(first.projects[name] == second.projects[name] for name in first.projects):
         console.print("[bold red]\nThe two analyses don't have the same set of projects.")
         console.print(
             "[italic]-> Eventually this will be just a warning, but that's a TODO"

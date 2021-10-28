@@ -85,48 +85,44 @@ class FailedResult(FileResult):
     message: str
 
 
-@dataclasses.dataclass
-class ProjectData:
-    results: Dict[str, FileResult]
-    project: Project
+ProjectName = str
+ProjectResults = Dict[str, FileResult]
 
 
 @dataclasses.dataclass
-class AnalysisData:
-    projects: Dict[str, ProjectData]
+class Analysis:
+    projects: Dict[ProjectName, Project]
+    results: Dict[ProjectName, ProjectResults]
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @classmethod
-    def load(cls, data: JSON) -> "AnalysisData":
-        projects = {}
-        for name, project_data in data["projects"].items():
-            files: Dict[str, FileResult] = {}
-            for filepath, result in project_data["results"].items():
+    def load(cls, data: JSON) -> "Analysis":
+        projects = {name: Project(**config) for name, config in data["projects"].items()}
+        results = {}
+        for project_name, project_results in data["results"].items():
+            for filepath, result in project_results.items():
+                obj: FileResult
                 if result["type"] == "reformatted":
-                    files[filepath] = ReformattedResult(
-                        src=result["src"], dst=result["dst"]
-                    )
+                    obj = ReformattedResult(result["src"], dst=result["dst"])
                 elif result["type"] == "nothing-changed":
-                    files[filepath] = NothingChangedResult(src=result["src"])
+                    obj = NothingChangedResult(result["src"])
                 elif result["type"] == "failed":
-                    files[filepath] = FailedResult(
-                        src=result["src"],
-                        error=result["error"],
-                        message=result["message"],
+                    obj = FailedResult(
+                        result["src"], error=result["error"], message=result["message"]
                     )
-            project_definition = Project(**project_data["project"])
-            projects[name] = ProjectData(results=files, project=project_definition)
+                project_results[filepath] = obj
+            results[project_name] = project_results
 
-        return cls(projects=projects, metadata=data["metadata"])
+        return cls(projects=projects, results=results, metadata=data["metadata"])
 
-    def __iter__(self) -> Iterator[ProjectData]:
-        return iter(self.projects.values())
+    def __iter__(self) -> Iterator[ProjectResults]:
+        return iter(self.results.values())
 
     @property
     def files(self) -> List[FileResult]:
         files: List[FileResult] = []
-        for proj_data in self.projects.values():
-            files.extend(proj_data.results.values())
+        for proj_results in self.results.values():
+            files.extend(proj_results.values())
         return files
 
 
@@ -188,7 +184,7 @@ def setup_projects(
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
     verbose: bool,
-) -> List[Tuple[Project, Path]]:
+) -> List[Project]:
     ready = []
     for proj in projects:
         target = Path(workdir, proj.name)
@@ -213,7 +209,7 @@ def setup_projects(
             progress.console.log(f"[dim]  commit -> {commit_msg}", highlight=False)
             progress.console.log(f"[dim]  commit -> {commit_sha}")
         proj = replace(proj, commit=commit_sha)
-        ready.append((proj, target))
+        ready.append(proj)
         progress.advance(task)
 
     return ready
@@ -281,13 +277,16 @@ def check_file_shim(
 
 
 def analyze_projects(
-    projects: List[Tuple[Project, Path]],
+    projects: List[Project],
+    work_dir: Path,
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
     verbose: bool,
-) -> Dict[str, ProjectData]:
+) -> Dict[str, ProjectResults]:
     # TODO: refactor this and related functions cuz it's a bit of a mess :)
-    files_and_modes = [get_project_files_and_mode(proj, path) for proj, path in projects]
+    files_and_modes = [
+        get_project_files_and_mode(proj, work_dir / proj.name) for proj in projects
+    ]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)
 
@@ -307,15 +306,15 @@ def analyze_projects(
 
     with multiprocessing.Pool() as pool:
         results = {}
-        for (project, path), (files, mode) in zip(projects, files_and_modes):
+        for project, (files, mode) in zip(projects, files_and_modes):
             project_task = progress.add_task(
                 f"[bold] on {project.name}", total=len(files)
             )
             if verbose:
                 console.log(f"[bold]Checking {project.name}[/] ({len(files)} files)")
             t0 = time.perf_counter()
-            file_results = check_project_files(files, path, mode=mode)
-            results[project.name] = ProjectData(results=file_results, project=project)
+            file_results = check_project_files(files, work_dir / project.name, mode=mode)
+            results[project.name] = file_results
             elapsed = time.perf_counter() - t0
             console.log(f"[bold]{project.name} finished[/] (in {elapsed:.3f} seconds)")
             progress.remove_task(project_task)
