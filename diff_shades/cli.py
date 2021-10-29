@@ -152,6 +152,7 @@ def analyze(
 
     if repeat_projects_from:
         data = json.loads(repeat_projects_from.read_text("utf-8"))
+        console.log(f"[bold]Loaded blueprint analysis: {repeat_projects_from}")
         projects = list(Analysis.load(data).projects.values())
     else:
         projects = PROJECTS
