@@ -61,17 +61,17 @@ def main(force_color: bool) -> None:
     Features include:
      - Simple but readable diffing capabilities
      - Repeatable analyses via --repeat-projects-from
-     - Per-project python_requires support
      - Structured JSON output
-     - Oh and of course, very pretty output!
+     - per-project python_requires support
+     - Oh and of course, pretty output!
 
     \b
     Potential tasks / additionals:
      - jupyter notebook support
+     - custom per-analysis formatting configuration
      - even more helpful output
-     - stronger diffing abilities
      - better UX (particularly when things go wrong)
-     - so much code cleanup - like a lot :p
+     - code cleanup as my code is messy as usual :p
     """
     rich.traceback.install(suppress=[click], show_locals=True)
     rich.reconfigure(log_path=False)
