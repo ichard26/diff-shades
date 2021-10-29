@@ -270,7 +270,7 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
         sys.exit(1)
 
     console.line()
-    if first == second:
+    if first.results == second.results:
         console.print(f"[bold {RESULT_COLORS['nothing-changed']}]Nothing-changed.")
         sys.exit(0)
     else:
