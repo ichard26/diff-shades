@@ -7,7 +7,6 @@ import multiprocessing
 import shutil
 import subprocess
 import sys
-import time
 from dataclasses import field, replace
 from functools import partial
 from pathlib import Path
@@ -18,6 +17,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
     overload,
@@ -39,7 +39,7 @@ from diff_shades.config import Project
 from diff_shades.output import suppress_output
 
 GIT_BIN: Final = shutil.which("git")
-FILE_RESULT_COLORS: Final = {
+RESULT_COLORS: Final = {
     "reformatted": "cyan",
     "nothing-changed": "magenta",
     "failed": "red",
@@ -134,19 +134,34 @@ def filter_results(
 
 
 @overload
-def filter_results(file_results: List[FileResult], type: str) -> List[FileResult]:
+def filter_results(file_results: Sequence[FileResult], type: str) -> List[FileResult]:
     ...
 
 
 def filter_results(
-    file_results: Union[Dict[str, FileResult], List[FileResult]], type: str
+    file_results: Union[Dict[str, FileResult], Sequence[FileResult]], type: str
 ) -> Union[Dict[str, FileResult], List[FileResult]]:
-    if isinstance(file_results, list):
-        return [result for result in file_results if result.type == type]
-    else:
+    if isinstance(file_results, dict):
         return {
             file: result for file, result in file_results.items() if result.type == type
         }
+    else:
+        return [result for result in file_results if result.type == type]
+
+
+def get_overall_result(
+    results: Union[ProjectResults, Sequence[FileResult]]
+) -> ResultTypes:
+    results = list(results.values()) if isinstance(results, dict) else results
+    results_by_type = [r.type for r in results]
+    if "failed" in results_by_type:
+        return "failed"
+
+    if "reformatted" in results_by_type:
+        return "reformatted"
+
+    assert [r.type == "nothing-changed" for r in results]
+    return "nothing-changed"
 
 
 # =====================
@@ -185,6 +200,7 @@ def setup_projects(
     task: rich.progress.TaskID,
     verbose: bool,
 ) -> List[Project]:
+    bold = "[bold]" if verbose else ""
     ready = []
     for proj in projects:
         target = Path(workdir, proj.name)
@@ -198,11 +214,11 @@ def setup_projects(
 
         if can_reuse:
             progress.console.log(
-                f"[bold]Using pre-existing clone of {proj.name}[/] \[{proj.url}]"
+                f"{bold}Using pre-existing clone of {proj.name} - {proj.url}"
             )
         else:
             clone_repo(proj.url, to=target, sha=proj.commit)
-            progress.console.log(f"[bold]Cloned {proj.name}[/] \[{proj.url}]")
+            progress.console.log(f"{bold}Cloned {proj.name} - {proj.url}")
 
         commit_sha, commit_msg = get_commit(target)
         if verbose:
@@ -289,6 +305,7 @@ def analyze_projects(
     ]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)
+    bold = "[bold]" if verbose else ""
 
     def check_project_files(
         files: List[Path], project_path: Path, *, mode: "black.FileMode"
@@ -297,7 +314,7 @@ def analyze_projects(
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
             if verbose:
-                result_colour = FILE_RESULT_COLORS[result.type]
+                result_colour = RESULT_COLORS[result.type]
                 console.log(f"  {filepath}: [{result_colour}]{result.type}")
             file_results[filepath] = result
             progress.advance(task)
@@ -307,16 +324,14 @@ def analyze_projects(
     with multiprocessing.Pool() as pool:
         results = {}
         for project, (files, mode) in zip(projects, files_and_modes):
-            project_task = progress.add_task(
-                f"[bold] on {project.name}", total=len(files)
-            )
+            project_task = progress.add_task(f"[bold]-> {project.name}", total=len(files))
             if verbose:
-                console.log(f"[bold]Checking {project.name}[/] ({len(files)} files)")
-            t0 = time.perf_counter()
+                console.log(f"[bold]Checking {project.name} ({len(files)} files)")
             file_results = check_project_files(files, work_dir / project.name, mode=mode)
             results[project.name] = file_results
-            elapsed = time.perf_counter() - t0
-            console.log(f"[bold]{project.name} finished[/] (in {elapsed:.3f} seconds)")
+            overall_result = get_overall_result(file_results)
+            coloring = RESULT_COLORS[overall_result]
+            console.log(f"{bold}{project.name} finished as [{coloring}]{overall_result}")
             progress.remove_task(project_task)
 
     return results

@@ -6,10 +6,11 @@ import contextlib
 import dataclasses
 import json
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Iterator, Optional, Set, TypeVar
+from typing import ContextManager, Iterator, Optional, Set, TypeVar, cast
 
 import click
 import rich
@@ -19,11 +20,13 @@ from rich.table import Table
 
 import diff_shades
 from diff_shades.analysis import (
-    FILE_RESULT_COLORS,
     GIT_BIN,
+    RESULT_COLORS,
     Analysis,
+    ResultTypes,
     analyze_projects,
     filter_results,
+    get_overall_result,
     setup_projects,
 )
 from diff_shades.config import PROJECTS
@@ -215,16 +218,14 @@ def analyze(
     file_table.add_column("# of files")
     for type in ("nothing-changed", "reformatted", "failed"):
         count = len(filter_results(analysis.files, type))
-        file_table.add_row(type, str(count), style=FILE_RESULT_COLORS[type])
+        file_table.add_row(type, str(count), style=RESULT_COLORS[type])
     project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
     project_table.add_column("Result")
     project_table.add_column("# of projects")
+    type_counts = Counter(get_overall_result(proj) for proj in analysis)
     for type in ("nothing-changed", "reformatted", "failed"):
-        if type == "nothing-changed":
-            count = sum(proj == filter_results(proj, type) for proj in analysis)
-        else:
-            count = sum(bool(filter_results(proj, type)) for proj in analysis)
-        project_table.add_row(type, str(count), style=FILE_RESULT_COLORS[type])
+        count = type_counts.get(cast(ResultTypes, type), 0)
+        project_table.add_row(type, str(count), style=RESULT_COLORS[type])
     main_table.add_row(file_table, "   ", project_table)
     main_table.add_row(
         f"\n[bold]# of files: {len(analysis.files)}\n"
@@ -269,8 +270,8 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
 
     console.line()
     if first == second:
-        console.print(f"[bold {FILE_RESULT_COLORS['nothing-changed']}]Nothing-changed.")
+        console.print(f"[bold {RESULT_COLORS['nothing-changed']}]Nothing-changed.")
         sys.exit(0)
     else:
-        console.print(f"[bold {FILE_RESULT_COLORS['reformatted']}]Differences found.")
+        console.print(f"[bold {RESULT_COLORS['reformatted']}]Differences found.")
         sys.exit(1 if check else 0)
