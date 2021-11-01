@@ -4,9 +4,11 @@
 
 import dataclasses
 import multiprocessing
+import os
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import field, replace
 from functools import partial
 from pathlib import Path
@@ -36,7 +38,6 @@ import rich
 import rich.progress
 
 from diff_shades.config import Project
-from diff_shades.output import suppress_output
 
 GIT_BIN: Final = shutil.which("git")
 RESULT_COLORS: Final = {
@@ -229,6 +230,13 @@ def setup_projects(
         progress.advance(task)
 
     return ready
+
+
+@contextmanager
+def suppress_output() -> Iterator:
+    with open(os.devnull, "w", encoding="utf-8") as blackhole:
+        with redirect_stdout(blackhole), redirect_stderr(blackhole):
+            yield
 
 
 # HACK: I know this is hacky but the benefit is I don't need to copy and

@@ -6,31 +6,25 @@ import contextlib
 import dataclasses
 import json
 import sys
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Iterator, Optional, Set, TypeVar, cast
+from typing import ContextManager, Iterator, Optional, Set, TypeVar
 
 import click
 import rich
 import rich.traceback
-from rich.panel import Panel
-from rich.table import Table
 
 import diff_shades
 from diff_shades.analysis import (
     GIT_BIN,
     RESULT_COLORS,
     Analysis,
-    ResultTypes,
     analyze_projects,
-    filter_results,
-    get_overall_result,
     setup_projects,
 )
 from diff_shades.config import PROJECTS
-from diff_shades.output import make_rich_progress
+from diff_shades.output import make_analysis_summary, make_rich_progress
 
 console = rich.get_console()
 
@@ -213,26 +207,26 @@ def analyze(
         f.write("\n")
 
     console.line()
-    main_table = Table.grid()
-    file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
-    file_table.add_column("Result")
-    file_table.add_column("# of files")
-    for type in ("nothing-changed", "reformatted", "failed"):
-        count = len(filter_results(analysis.files, type))
-        file_table.add_row(type, str(count), style=RESULT_COLORS[type])
-    project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
-    project_table.add_column("Result")
-    project_table.add_column("# of projects")
-    type_counts = Counter(get_overall_result(proj) for proj in analysis)
-    for type in ("nothing-changed", "reformatted", "failed"):
-        count = type_counts.get(cast(ResultTypes, type), 0)
-        project_table.add_row(type, str(count), style=RESULT_COLORS[type])
-    main_table.add_row(file_table, "   ", project_table)
-    main_table.add_row(
-        f"\n[bold]# of files: {len(analysis.files)}\n"
-        f"[bold]# of projects: {len(analysis.projects)}"
-    )
-    panel = Panel(main_table, title="[bold]Summary", expand=False)
+    panel = make_analysis_summary(analysis)
+    console.print(panel)
+
+
+@main.command()
+@click.argument(
+    "analysis-path",
+    metavar="analysis",
+    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
+)
+@click.argument("key", metavar="key", required=False)
+def show(analysis_path: Path, key: Optional[str]) -> None:
+    """
+    Show results or metadata from an analysis.
+    """
+    analysis = Analysis.load(json.loads(analysis_path.read_text("utf-8")))
+    console.log(f"Loaded analysis: {analysis_path}")
+
+    console.line()
+    panel = make_analysis_summary(analysis)
     console.print(panel)
 
 

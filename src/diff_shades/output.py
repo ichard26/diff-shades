@@ -2,14 +2,22 @@
 # > Messaging and reporting utilities
 # =================================
 
-import contextlib
 import difflib
-import os
-from contextlib import redirect_stderr, redirect_stdout
-from typing import Iterator
+from collections import Counter
+from typing import cast
 
 import rich
-import rich.progress
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TimeElapsedColumn
+from rich.table import Table
+
+from diff_shades.analysis import (
+    RESULT_COLORS,
+    Analysis,
+    ResultTypes,
+    filter_results,
+    get_overall_result,
+)
 
 console = rich.get_console()
 
@@ -50,21 +58,38 @@ def colour_diff(contents: str) -> str:
     return "\n".join(lines)
 
 
-@contextlib.contextmanager
-def suppress_output() -> Iterator:
-    with open(os.devnull, "w", encoding="utf-8") as blackhole:
-        with redirect_stdout(blackhole), redirect_stderr(blackhole):
-            yield
-
-
-def make_rich_progress() -> rich.progress.Progress:
-    return rich.progress.Progress(
+def make_rich_progress() -> Progress:
+    return Progress(
         "[progress.description]{task.description}",
-        rich.progress.BarColumn(),
+        BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
         "-",
         "[progress.percentage]{task.completed}/{task.total}",
         "-",
-        rich.progress.TimeElapsedColumn(),
+        TimeElapsedColumn(),
         console=console,
     )
+
+
+def make_analysis_summary(analysis: Analysis) -> Panel:
+    main_table = Table.grid()
+    file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
+    file_table.add_column("Result")
+    file_table.add_column("# of files")
+    project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
+    project_table.add_column("Result")
+    project_table.add_column("# of projects")
+    for type in ("nothing-changed", "reformatted", "failed"):
+        count = len(filter_results(analysis.files, type))
+        file_table.add_row(type, str(count), style=RESULT_COLORS[type])
+    type_counts = Counter(get_overall_result(proj) for proj in analysis)
+    for type in ("nothing-changed", "reformatted", "failed"):
+        count = type_counts.get(cast(ResultTypes, type), 0)
+        project_table.add_row(type, str(count), style=RESULT_COLORS[type])
+    main_table.add_row(file_table, "   ", project_table)
+    main_table.add_row(
+        f"\n[bold]# of files: {len(analysis.files)}\n"
+        f"[bold]# of projects: {len(analysis.projects)}"
+    )
+
+    return Panel(main_table, title="[bold]Summary", expand=False)
