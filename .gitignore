@@ -1,5 +1,3 @@
-
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 
@@ -65,5 +63,6 @@ ENV/
 .dmypy.json
 dmypy.json
 
-# Editor configuration
+# Editor configuration / junk
 .vscode/
+.*.swp  # thanks vim >.<

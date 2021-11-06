@@ -44,5 +44,5 @@ jobs:
           python -m pip install pip wheel --upgrade
           python -m pip install nox
 
-      - name: Run nox tests session
-        run: nox --force-color --verbose -s tests-${{ matrix.python }}
+      - name: Run nox smoke-tests session
+        run: nox --force-color --verbose -s smoke-tests-${{ matrix.python }}
