@@ -70,6 +70,7 @@ PROJECTS: Final = [
     Project("warehouse", "https://github.com/pypa/warehouse.git"),
 ]
 for p in PROJECTS:
+    assert p.name == p.name.casefold(), f"project name '{p.name}' wasn't casefolded ..."
     if p.custom_arguments is None:
         p.custom_arguments = ["--experimental-string-processing"]
     else:

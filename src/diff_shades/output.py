@@ -7,6 +7,7 @@ from collections import Counter
 from typing import cast
 
 import rich
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
@@ -20,8 +21,6 @@ from diff_shades.analysis import (
 )
 
 console = rich.get_console()
-
-# NOTE: These two functions were copied straight from black.output :P
 
 
 def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
@@ -42,18 +41,18 @@ def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
     return "".join(diff_lines)
 
 
-def colour_diff(contents: str) -> str:
-    """Inject ANSI colour codes to the diff."""
-    lines = contents.split("\n")
+def color_diff(contents: str) -> str:
+    """Inject rich markup into the diff."""
+    lines = escape(contents).split("\n")
     for i, line in enumerate(lines):
         if line.startswith("+++") or line.startswith("---"):
-            line = "\033[1;37m" + line + "\033[0m"  # bold white, reset
+            line = "[bold]" + line + "[/]"
         elif line.startswith("@@"):
-            line = "\033[36m" + line + "\033[0m"  # cyan, reset
+            line = "[cyan]" + line + "[/]"
         elif line.startswith("+"):
-            line = "\033[32m" + line + "\033[0m"  # green, reset
+            line = "[green]" + line + "[/]"
         elif line.startswith("-"):
-            line = "\033[31m" + line + "\033[0m"  # red, reset
+            line = "[red]" + line + "[/]"
         lines[i] = line
     return "\n".join(lines)
 
