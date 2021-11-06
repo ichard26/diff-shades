@@ -118,7 +118,7 @@ def main(no_color: Optional[bool]) -> None:
     "--repeat-projects-from",
     type=click.Path(exists=True, dir_okay=False, file_okay=True, resolve_path=True, path_type=Path),
     help=(
-        "Use the same projects (and commits!) used during another anaylsis."
+        "Use the same projects (and commits!) used during another analysis."
         " This is similar to --work-dir but for when you don't have the"
         " checkouts available."
     )

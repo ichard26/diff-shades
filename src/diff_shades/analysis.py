@@ -280,7 +280,8 @@ def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileRe
 
     src = path.read_text("utf8")
     try:
-        dst = black.format_file_contents(src, fast=False, mode=mode)
+        with suppress_output():
+            dst = black.format_file_contents(src, fast=False, mode=mode)
     except black.NothingChanged:
         return NothingChangedResult(src=src)
 
