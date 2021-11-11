@@ -191,10 +191,6 @@ def analyze(
                 "[bold blue]Setting up projects", total=len(projects)
             )
             projects = setup_projects(projects, work_dir, progress, setup_task, verbose)
-        if not console.is_terminal:
-            # Curiously this is needed when redirecting to a file so the next emitted
-            # line isn't attached to the (completed) progress bar.
-            console.line()
 
         with make_rich_progress() as progress:
             analyze_task = progress.add_task("[bold magenta]Running black")
@@ -210,10 +206,6 @@ def analyze(
             results=results,
             metadata=metadata,
         )
-        if not console.is_terminal:
-            # Curiously this is needed when redirecting to a file so the next emitted
-            # line isn't attached to the (completed) progress bar.
-            console.line()
 
     with open(results_path, "w", encoding="utf-8") as f:
         raw = dataclasses.asdict(analysis)
