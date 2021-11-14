@@ -12,8 +12,6 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Final
 
-from packaging.specifiers import SpecifierSet
-
 
 @dataclasses.dataclass(eq=True)
 class Project:
@@ -25,6 +23,8 @@ class Project:
 
     @property
     def supported_by_runtime(self) -> bool:
+        from packaging.specifiers import SpecifierSet
+
         if self.python_requires is None:
             return True
 

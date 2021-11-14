@@ -3,7 +3,6 @@
 # =============================
 
 import dataclasses
-import multiprocessing
 import os
 import shutil
 import subprocess
@@ -24,7 +23,6 @@ from typing import (
     Union,
     overload,
 )
-from unittest.mock import patch
 
 if sys.version_info >= (3, 8):
     from typing import Final, Literal
@@ -248,6 +246,10 @@ def suppress_output() -> Iterator:
 def get_project_files_and_mode(
     project: Project, path: Path
 ) -> Tuple[List[Path], "black.FileMode"]:
+    # This pulls in a ton of stuff including the heavy asyncio. Let's avoid the import cost
+    # unless till the last possible moment.
+    from unittest.mock import patch
+
     import black
 
     files: List[Path] = []
@@ -308,6 +310,9 @@ def analyze_projects(
     task: rich.progress.TaskID,
     verbose: bool,
 ) -> Dict[str, ProjectResults]:
+    # Slow import, let's not pay all of the time (this makes show and friends faster).
+    import multiprocessing
+
     # TODO: refactor this and related functions cuz it's a bit of a mess :)
     files_and_modes = [
         get_project_files_and_mode(proj, work_dir / proj.name) for proj in projects
