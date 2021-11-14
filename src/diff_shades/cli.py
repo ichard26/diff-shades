@@ -4,14 +4,18 @@
 
 import contextlib
 import dataclasses
+import hashlib
 import json
+import pickle
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Iterator, Optional, Set, TypeVar
+from typing import ContextManager, Iterator, Optional, Set, Tuple, TypeVar
 
 import click
+import platformdirs
 import rich
 import rich.traceback
 from rich.markup import escape
@@ -40,6 +44,7 @@ from diff_shades.output import (
 
 console = rich.get_console()
 
+CACHE_DIR = Path(platformdirs.user_cache_dir("diff-shades"))
 NOTHING_CHANGED_COLOR = RESULT_COLORS["nothing-changed"]
 T = TypeVar("T")
 
@@ -48,6 +53,31 @@ T = TypeVar("T")
 def nullcontext(enter_result: T) -> Iterator[T]:
     # contextlib.nullcontext was only added in 3.7+
     yield enter_result
+
+
+def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
+    CACHE_DIR.mkdir(exist_ok=True)
+    filepath = filepath.resolve()
+    stat = filepath.stat()
+    cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"
+    hasher = hashlib.blake2b(cache_key.encode("utf-8"), digest_size=15)
+    short_key = hasher.hexdigest()
+
+    cache_path = Path(CACHE_DIR, f"{short_key}.pickle")
+    if cache_path.exists():
+        try:
+            analysis = pickle.loads(cache_path.read_bytes())
+        except Exception:
+            cache_path.unlink()
+        else:
+            return analysis, True
+
+    analysis = Analysis.load(json.loads(filepath.read_text("utf-8")))
+    if len(list(CACHE_DIR.iterdir())) >= 3:
+        shutil.rmtree(CACHE_DIR)
+        CACHE_DIR.mkdir()
+    cache_path.write_bytes(pickle.dumps(analysis, protocol=4))
+    return analysis, False
 
 
 @click.group()
@@ -159,9 +189,12 @@ def analyze(
         sys.exit(1)
 
     if repeat_projects_from:
-        data = json.loads(repeat_projects_from.read_text("utf-8"))
-        console.log(f"[bold]Loaded blueprint analysis: {repeat_projects_from}")
-        projects = list(Analysis.load(data).projects.values())
+        analysis, cached = load_analysis(repeat_projects_from)
+        console.log(
+            f"[bold]Loaded blueprint analysis: {repeat_projects_from}"
+            + (" (cached)" if cached else "")
+        )
+        projects = list(analysis.projects.values())
     else:
         projects = PROJECTS
 
@@ -228,8 +261,9 @@ def show(analysis_path: Path, key: str) -> None:
     """
     Show results or metadata from an analysis.
     """
-    analysis = Analysis.load(json.loads(analysis_path.read_text("utf-8")))
-    console.log(f"Loaded analysis: {analysis_path}\n")
+    analysis, cached = load_analysis(analysis_path)
+    console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}")
+    console.line()
 
     project_key, _, file_key = key.partition(":")
     project_key = project_key.casefold()
@@ -273,9 +307,9 @@ def inspect(analysis_path: Path, field: str, key: str, quiet: bool) -> None:
     """
     Query file result fields in the raw analysis data.
     """
-    analysis = Analysis.load(json.loads(analysis_path.read_text("utf-8")))
+    analysis, cached = load_analysis(analysis_path)
     if not quiet:
-        console.log(f"Loaded analysis: {analysis_path}\n")
+        console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}\n")
 
     project_key, _, file_key = key.partition(":")
     try:
@@ -312,10 +346,10 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     # TODO: allow filtering of projects and files checked
     # TODO: more informative output (in particular on the differences)
 
-    first = Analysis.load(json.loads(analysis_one.read_text("utf-8")))
-    console.log(f"Loaded first analysis: {analysis_one}")
-    second = Analysis.load(json.loads(analysis_two.read_text("utf-8")))
-    console.log(f"Loaded second analysis: {analysis_two}")
+    first, cached = load_analysis(analysis_one)
+    console.log(f"Loaded first analysis: {analysis_one}{' (cached)' if cached else ''}")
+    second, cached = load_analysis(analysis_two)
+    console.log(f"Loaded second analysis: {analysis_two}{' (cached)' if cached else ''}")
 
     # TODO: Gracefully warn but accept analyses that weren't set up the exact same way.
     if set(first.projects) ^ set(second.projects) or not all(
@@ -356,8 +390,8 @@ def show_failed(analysis_path: Path, key: str, check: bool) -> None:
     """
     Show and check for failed files in an analysis.
     """
-    analysis = Analysis.load(json.loads(analysis_path.read_text("utf-8")))
-    console.log(f"Loaded analysis: {analysis_path}\n")
+    analysis, cached = load_analysis(analysis_path)
+    console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}\n")
 
     if key and key not in analysis.projects:
         console.print(f"[bold red]The project '{key}' couldn't be found.")
