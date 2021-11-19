@@ -417,9 +417,6 @@ def show_failed(analysis_path: Path, key: str, check: bool) -> None:
         if failed:
             console.print(f"[bold red]{proj_name}:", highlight=False)
             for number, (file, result) in enumerate(failed.items(), start=1):
-                # I could just write even more overloads for filter_results so this isn't
-                # necesssary but that seems overkill for the time being.
-                assert isinstance(result, FailedResult)
                 s = f"{number}. {file}: {escape(result.error)} - {escape(result.message)}"
                 console.print(Padding(s, (0, 0, 0, 2)), highlight=False)
                 failed_files += 1

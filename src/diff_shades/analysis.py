@@ -17,6 +17,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -118,34 +119,46 @@ class Analysis:
         return iter(self.results.values())
 
     @property
-    def files(self) -> List[FileResult]:
-        files: List[FileResult] = []
-        for proj_results in self.results.values():
-            files.extend(proj_results.values())
+    def files(self) -> Dict[str, FileResult]:
+        files: Dict[str, FileResult] = {}
+        for proj, proj_results in self.results.items():
+            for file, file_result in proj_results.items():
+                files[f"{proj}:{file}"] = file_result
         return files
 
 
 @overload
 def filter_results(
-    file_results: Dict[str, FileResult], type: str
-) -> Dict[str, FileResult]:
+    file_results: Mapping[str, FileResult], type: Literal["reformatted"]
+) -> Mapping[str, ReformattedResult]:
     ...
 
 
 @overload
-def filter_results(file_results: Sequence[FileResult], type: str) -> List[FileResult]:
+def filter_results(
+    file_results: Mapping[str, FileResult], type: Literal["failed"]
+) -> Mapping[str, FailedResult]:
+    ...
+
+
+@overload
+def filter_results(
+    file_results: Mapping[str, FileResult], type: Literal["nothing-changed"]
+) -> Mapping[str, NothingChangedResult]:
+    ...
+
+
+@overload
+def filter_results(
+    file_results: Mapping[str, FileResult], type: str
+) -> Mapping[str, FileResult]:
     ...
 
 
 def filter_results(
-    file_results: Union[Dict[str, FileResult], Sequence[FileResult]], type: str
-) -> Union[Dict[str, FileResult], List[FileResult]]:
-    if isinstance(file_results, dict):
-        return {
-            file: result for file, result in file_results.items() if result.type == type
-        }
-    else:
-        return [result for result in file_results if result.type == type]
+    file_results: Mapping[str, FileResult], type: str
+) -> Mapping[str, FileResult]:
+    return {file: result for file, result in file_results.items() if result.type == type}
 
 
 def get_overall_result(
@@ -328,8 +341,7 @@ def analyze_projects(
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
             if verbose:
-                result_colour = RESULT_COLORS[result.type]
-                console.log(f"  {filepath}: [{result_colour}]{result.type}")
+                console.log(f"  {filepath}: [{result.type}]{result.type}")
             file_results[filepath] = result
             progress.advance(task)
             progress.advance(project_task)
