@@ -15,6 +15,11 @@ from tempfile import TemporaryDirectory
 from typing import ContextManager, Iterator, Optional, Set, Tuple, TypeVar
 from zipfile import ZipFile
 
+if sys.version_info >= (3, 8):
+    from typing import Final
+else:
+    from typing_extensions import Final
+
 import click
 import platformdirs
 import rich
@@ -22,6 +27,7 @@ import rich.traceback
 from rich.markup import escape
 from rich.padding import Padding
 from rich.syntax import Syntax
+from rich.theme import Theme
 
 import diff_shades
 from diff_shades.analysis import (
@@ -43,10 +49,12 @@ from diff_shades.output import (
     unified_diff,
 )
 
-console = rich.get_console()
+console: Final = rich.get_console()
+normalize_input: Final = (
+    lambda ctx, param, val: val.casefold() if val is not None else None
+)
 
-CACHE_DIR = Path(platformdirs.user_cache_dir("diff-shades"))
-NOTHING_CHANGED_COLOR = RESULT_COLORS["nothing-changed"]
+CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
 T = TypeVar("T")
 
 
@@ -129,7 +137,15 @@ def main(no_color: Optional[bool]) -> None:
     """
     rich.traceback.install(suppress=[click], show_locals=True)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
-    rich.reconfigure(log_path=False, color_system=color_mode_key[no_color])
+    # fmt: off
+    theme = Theme({
+        "error": "bold red",
+        "warning": "bold yellow",
+        "info": "bold",
+        **RESULT_COLORS
+    })
+    # fmt: on
+    rich.reconfigure(log_path=False, color_system=color_mode_key[no_color], theme=theme)
 
 
 # fmt: off
@@ -187,20 +203,20 @@ def analyze(
     try:
         import black
     except ImportError as err:
-        console.print(f"[red bold]Couldn't import black: {err}")
-        console.print("[bold]-> This command requires an installation of Black.")
+        console.print(f"[error]Couldn't import black: {err}")
+        console.print("[info]-> This command requires an installation of Black.")
         sys.exit(1)
 
     if GIT_BIN is None:
-        console.print("[red bold]Couldn't find a Git executable.")
-        console.print("[bold]-> This command requires git sadly enough.")
+        console.print("[error]Couldn't find a Git executable.")
+        console.print("[info]-> This command requires git sadly enough.")
         sys.exit(1)
 
     if results_path.exists() and results_path.is_file():
-        console.log(f"[yellow bold]Overwriting {results_path} as it already exists!")
+        console.log(f"[warning]Overwriting {results_path} as it already exists!")
     elif results_path.exists() and results_path.is_dir():
-        console.print(f"[red bold]{results_path} is a pre-existing directory.")
-        console.print("[bold]-> Can't continue as I won't overwrite a directory.")
+        console.print(f"[error]{results_path} is a pre-existing directory.")
+        console.print("[info]-> Can't continue as I won't overwrite a directory.")
         sys.exit(1)
 
     if repeat_projects_from:
@@ -220,7 +236,7 @@ def analyze(
         if not proj.supported_by_runtime:
             projects.remove(proj)
             console.log(
-                "[bold yellow]"
+                "[warning]"
                 f"Skipping {proj.name} as it requires python{proj.python_requires}"
             )
 
@@ -271,8 +287,17 @@ def analyze(
     metavar="analysis",
     type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
 )
-@click.argument("key", metavar="project[:file]", default="", required=False)
-def show(analysis_path: Path, key: str) -> None:
+@click.argument(
+    "project_key", metavar="project", callback=normalize_input, required=False
+)
+@click.argument("file_key", metavar="file", required=False)
+@click.argument("field_key", metavar="field", callback=normalize_input, required=False)
+def show(
+    analysis_path: Path,
+    project_key: Optional[str],
+    file_key: Optional[str],
+    field_key: Optional[str],
+) -> None:
     """
     Show results or metadata from an analysis.
     """
@@ -280,20 +305,26 @@ def show(analysis_path: Path, key: str) -> None:
     console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}")
     console.line()
 
-    project_key, _, file_key = key.partition(":")
-    project_key = project_key.casefold()
     if project_key and file_key:
         try:
             result = analysis.results[project_key][file_key]
         except KeyError:
-            console.print(f"[bold red]{project_key}:{file_key} couldn't be found.")
+            console.print(f"[error]'{file_key}' couldn't be found under {project_key}.")
             sys.exit(1)
 
-        if isinstance(result, NothingChangedResult):
-            console.print(f"[bold {NOTHING_CHANGED_COLOR}]Nothing-changed.")
+        if field_key:
+            if not hasattr(result, field_key):
+                console.print(f"[error]{file_key} has no '{field_key}' field.")
+                console.print(f"[bold]-> FYI the file's status is {result.type}")
+                sys.exit(1)
+
+            console.print(Syntax(getattr(result, field_key), "python"))
+
+        elif isinstance(result, NothingChangedResult):
+            console.print("[bold nothing-changed]Nothing-changed.")
         elif isinstance(result, FailedResult):
-            console.print(f"[bold red]{escape(result.error)}")
-            console.print(f"[red]-> {escape(result.message)}")
+            console.print(f"[error]{escape(result.error)}")
+            console.print(f"[info]-> {escape(result.message)}")
         elif isinstance(result, ReformattedResult):
             diff = unified_diff(result.src, result.dst, f"a/{file_key}", f"b/{file_key}")
             console.print(color_diff(diff), highlight=False)
@@ -301,44 +332,12 @@ def show(analysis_path: Path, key: str) -> None:
     elif project_key and not file_key:
         # TODO: implement a list view
         # TODO: implement a diff + failures view
-        console.print("[bold red]show-ing a project is not implemented, sorry!")
+        console.print("[error]show-ing a project is not implemented, sorry!")
         sys.exit(26)
 
     else:
         panel = make_analysis_summary(analysis)
         console.print(panel)
-
-
-@main.command()
-@click.argument(
-    "analysis-path",
-    metavar="analysis",
-    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
-)
-@click.argument("field", type=click.Choice(["src", "dst"], case_sensitive=False))
-@click.argument("key", metavar="project:file")
-@click.option("-q", "--quiet", is_flag=True, help="Suppress log output.")
-def inspect(analysis_path: Path, field: str, key: str, quiet: bool) -> None:
-    """
-    Query file result fields in the raw analysis data.
-    """
-    analysis, cached = load_analysis(analysis_path)
-    if not quiet:
-        console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}\n")
-
-    project_key, _, file_key = key.partition(":")
-    try:
-        result = analysis.results[project_key][file_key]
-    except KeyError:
-        console.print(f"[bold red]{project_key}:{file_key} couldn't be found.")
-        sys.exit(1)
-
-    if not hasattr(result, field):
-        console.print(f"[bold red]{key} doesn't contain the '{field}' field.")
-        console.print(f"[bold]-> FYI the file's status is {result.type}")
-        sys.exit(1)
-
-    console.print(Syntax(getattr(result, field), "python"))
 
 
 @main.command()
@@ -370,7 +369,7 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     if set(first.projects) ^ set(second.projects) or not all(
         first.projects[name] == second.projects[name] for name in first.projects
     ):
-        console.print("[bold red]\nThe two analyses don't have the same set of projects.")
+        console.print("[error]\nThe two analyses don't have the same set of projects.")
         console.print(
             "[italic]-> Eventually this will be just a warning, but that's a TODO"
         )
@@ -378,10 +377,10 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
 
     console.line()
     if first.results == second.results:
-        console.print(f"[bold {RESULT_COLORS['nothing-changed']}]Nothing-changed.")
+        console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
     else:
-        console.print(f"[bold {RESULT_COLORS['reformatted']}]Differences found.")
+        console.print("[bold][reformatted]Differences found.")
         sys.exit(1 if check else 0)
 
 
@@ -392,11 +391,7 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
 )
 @click.argument(
-    "key",
-    metavar="project",
-    default="",
-    callback=lambda c, p, s: s.casefold(),
-    required=False,
+    "key", metavar="project", default="", callback=normalize_input, required=False
 )
 @click.option(
     "--check", is_flag=True, help="Return a non-zero exit code if there's a failure."
@@ -409,7 +404,7 @@ def show_failed(analysis_path: Path, key: str, check: bool) -> None:
     console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}\n")
 
     if key and key not in analysis.projects:
-        console.print(f"[bold red]The project '{key}' couldn't be found.")
+        console.print(f"[error]The project '{key}' couldn't be found.")
         sys.exit(1)
 
     failed_projects = 0
