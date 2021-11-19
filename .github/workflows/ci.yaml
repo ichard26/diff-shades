@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run every Monday at 00:00 UTC.
+  schedule:
+    - cron: 0 0 * * MON
 
 jobs:
   pre-commit:
@@ -13,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
+        with:
+          cache: pip
+          cache-dependency-path: ".pre-commit-config.yaml"
       - uses: pre-commit/action@v2.0.3
         with:
           extra_args: --all-files
@@ -38,6 +44,8 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: "pyproject.toml"
 
       - name: Install base requirements
         run: |
