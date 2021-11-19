@@ -111,4 +111,4 @@ If you'd like a non-zero exit code if a difference was found please pass
 
 <!-- footer stuff -->
 
-[original]: https://github.com/ichard26/black-mypyc-wheels/blob/main/diff_shades.py
+[original]: https://github.com/ichard26/black-mypyc-wheels/blob/c448ae49df7570dc2745eccd947625897f6541ce/diff_shades.py
