@@ -26,7 +26,7 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu, macos, windows]
-        python: ["3.6", "3.7", "3.8", "3.9", "3.10"]
+        python: ["3.7", "3.8", "3.9", "3.10"]
 
     defaults:
       run:
@@ -38,6 +38,8 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: "pyproject.toml"
 
       - name: Install base requirements
         run: |

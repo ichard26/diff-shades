@@ -12,7 +12,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -24,11 +23,11 @@ classifiers = [
 license = {file = "LICENSE.txt"}
 readme = "README.md"
 
-requires-python = ">=3.6.2"
+requires-python = ">=3.7"
 dependencies = [
     "click >= 8.0.0",
-    "dataclasses >= 0.8; python_version < '3.7'",
     "packaging >= 21.0",
+    "platformdirs >= 2.4.0",
     "rich >= 10.13.0",
     "typing-extensions >= 3.7.4; python_version < '3.8'",
 ]
@@ -46,12 +45,11 @@ name = "diff_shades"
 
 [tool.black]
 line-length = 90
-target-version = ["py36", "py37", "py38", "py39"]
+target-version = ["py37", "py38", "py39"]
 
 [tool.isort]
 profile = "black"
 skip_gitignore = true
-py_version = "36"
-extra_standard_library = ["dataclasses"]
-known_third_party = ["click", "packaging", "rich", "black", "nox"]
+py_version = "37"
+known_third_party = ["click", "packaging", "rich", "black", "nox", "platformdirs"]
 known_first_party = ["diff_shades"]

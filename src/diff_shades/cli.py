@@ -2,17 +2,18 @@
 # > Command implementations
 # ============================
 
-import contextlib
 import dataclasses
 import hashlib
 import json
+import os
 import pickle
 import shutil
 import sys
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Iterator, Optional, Set, Tuple, TypeVar
+from typing import ContextManager, Optional, Set, Tuple
 from zipfile import ZipFile
 
 if sys.version_info >= (3, 8):
@@ -55,17 +56,10 @@ normalize_input: Final = (
 )
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
-T = TypeVar("T")
-
-
-@contextlib.contextmanager
-def nullcontext(enter_result: T) -> Iterator[T]:
-    # contextlib.nullcontext was only added in 3.7+
-    yield enter_result
 
 
 def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
-    CACHE_DIR.mkdir(exist_ok=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
     filepath = filepath.resolve()
     stat = filepath.stat()
     cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"

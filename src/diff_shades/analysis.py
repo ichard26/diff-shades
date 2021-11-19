@@ -327,6 +327,9 @@ def analyze_projects(
     # Slow import, let's not pay all of the time (this makes show and friends faster).
     import multiprocessing
 
+    # For consistency w/ Windows so things don't unintentionally work only on Linux.
+    multiprocessing.set_start_method("spawn")
+
     # TODO: refactor this and related functions cuz it's a bit of a mess :)
     files_and_modes = [
         get_project_files_and_mode(proj, work_dir / proj.name) for proj in projects
