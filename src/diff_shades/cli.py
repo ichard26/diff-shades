@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ContextManager, Iterator, Optional, Set, Tuple, TypeVar
+from zipfile import ZipFile
 
 import click
 import platformdirs
@@ -72,7 +73,21 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
         else:
             return analysis, True
 
-    analysis = Analysis.load(json.loads(filepath.read_text("utf-8")))
+    if filepath.name.endswith(".zip"):
+        with ZipFile(filepath) as zfile:
+            entries = zfile.infolist()
+            if len(entries) > 1:
+                # TODO: improve the error message handling for the whole tool
+                raise ValueError(
+                    f"{filepath} contains more than one member."
+                    " Please unzip and pass the right file manually."
+                )
+
+            with zfile.open(entries[0]) as f:
+                blob = f.read().decode("utf-8")
+    else:
+        blob = filepath.read_text("utf-8")
+    analysis = Analysis.load(json.loads(blob))
     if len(list(CACHE_DIR.iterdir())) >= 3:
         shutil.rmtree(CACHE_DIR)
         CACHE_DIR.mkdir()
