@@ -262,8 +262,8 @@ def analyze(
                 projects, work_dir, progress, analyze_task, verbose
             )
         metadata = {
-            "black_version": black.__version__,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "black-version": black.__version__,
+            "created-at": datetime.now(timezone.utc).isoformat(),
         }
         analysis = Analysis(
             projects={proj.name: proj for proj in projects},
@@ -390,13 +390,11 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     metavar="analysis",
     type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
 )
-@click.argument(
-    "key", metavar="project", default="", callback=normalize_input, required=False
-)
+@click.argument("key", metavar="project", callback=normalize_input, required=False)
 @click.option(
     "--check", is_flag=True, help="Return a non-zero exit code if there's a failure."
 )
-def show_failed(analysis_path: Path, key: str, check: bool) -> None:
+def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
     """
     Show and check for failed files in an analysis.
     """

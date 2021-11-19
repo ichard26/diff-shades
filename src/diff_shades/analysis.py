@@ -113,7 +113,8 @@ class Analysis:
                 project_results[filepath] = obj
             results[project_name] = project_results
 
-        return cls(projects=projects, results=results, metadata=data["metadata"])
+        metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
+        return cls(projects=projects, results=results, metadata=metadata)
 
     def __iter__(self) -> Iterator[ProjectResults]:
         return iter(self.results.values())
