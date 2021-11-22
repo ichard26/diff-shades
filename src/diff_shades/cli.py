@@ -7,8 +7,8 @@ import hashlib
 import json
 import os
 import pickle
-import shutil
 import sys
+import time
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,10 +56,32 @@ normalize_input: Final = (
 )
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
+CACHE_MAX_ENTRIES: Final = 3
+CACHE_LAST_ACCESS_CUTOFF: Final = 60 * 60 * 24 * 5
+
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def _clear_cache(*, ensure_room: bool = False) -> None:
+    """
+    Clears out old and unused analysis caches.
+
+    By default all cached analyses may be evicted. To also make sure there's a spot
+    available for one new entry please set :only_ensure_room: to True.
+    """
+    entries = [(entry, entry.stat().st_atime) for entry in CACHE_DIR.iterdir()]
+    by_oldest = sorted(entries, key=lambda x: x[1])
+    while len(by_oldest) > CACHE_MAX_ENTRIES - int(ensure_room):
+        by_oldest[0][0].unlink()
+        by_oldest.pop(0)
+    for entry, atime in by_oldest:
+        if time.time() - atime > CACHE_LAST_ACCESS_CUTOFF:
+            print(f"too old: {entry}")
+            entry.unlink()
 
 
 def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    _clear_cache()
     filepath = filepath.resolve()
     stat = filepath.stat()
     cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"
@@ -90,9 +112,7 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
     else:
         blob = filepath.read_text("utf-8")
     analysis = Analysis.load(json.loads(blob))
-    if len(list(CACHE_DIR.iterdir())) >= 3:
-        shutil.rmtree(CACHE_DIR)
-        CACHE_DIR.mkdir()
+    _clear_cache(ensure_room=True)
     cache_path.write_bytes(pickle.dumps(analysis, protocol=4))
     return analysis, False
 
@@ -216,8 +236,9 @@ def analyze(
     if repeat_projects_from:
         analysis, cached = load_analysis(repeat_projects_from)
         console.log(
-            f"[bold]Loaded blueprint analysis: {repeat_projects_from}"
-            + (" (cached)" if cached else "")
+            f"[bold]Loaded blueprint analysis: {repeat_projects_from}" " (cached)"
+            if cached
+            else ""
         )
         projects = list(analysis.projects.values())
     else:
@@ -237,11 +258,9 @@ def analyze(
     workdir_provider: ContextManager
     if work_dir:
         workdir_provider = nullcontext(work_dir)
-        if not work_dir.exists():
-            work_dir.mkdir()
+        os.makedirs(work_dir, exist_ok=True)
     else:
         workdir_provider = TemporaryDirectory(prefix="diff-shades-")
-
     with workdir_provider as _work_dir:
         work_dir = Path(_work_dir)
         with make_rich_progress() as progress:
