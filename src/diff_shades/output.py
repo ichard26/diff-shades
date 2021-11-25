@@ -96,7 +96,7 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     created_at = datetime.fromisoformat(analysis.metadata["created-at"])
     subtitle = (
         f"[dim]black {analysis.metadata['black-version']} -"
-        f" {created_at.strftime('%b %d %I:%M:%S %p')}"
+        f" {created_at.strftime('%b %d %Y %X')} UTC"
     )
 
     return Panel(main_table, title="[bold]Summary", subtitle=subtitle, expand=False)

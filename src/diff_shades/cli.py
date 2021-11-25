@@ -35,9 +35,6 @@ from diff_shades.analysis import (
     GIT_BIN,
     RESULT_COLORS,
     Analysis,
-    FailedResult,
-    NothingChangedResult,
-    ReformattedResult,
     analyze_projects,
     filter_results,
     setup_projects,
@@ -236,9 +233,8 @@ def analyze(
     if repeat_projects_from:
         analysis, cached = load_analysis(repeat_projects_from)
         console.log(
-            f"[bold]Loaded blueprint analysis: {repeat_projects_from}" " (cached)"
-            if cached
-            else ""
+            f"[bold]Loaded blueprint analysis: {repeat_projects_from}"
+            + (" (cached)" if cached else "")
         )
         projects = list(analysis.projects.values())
     else:
@@ -286,7 +282,16 @@ def analyze(
 
     with open(results_path, "w", encoding="utf-8") as f:
         raw = dataclasses.asdict(analysis)
-        json.dump(raw, f, separators=(",", ":"), ensure_ascii=False)
+        # Escaping non-ASCII characters in the JSON blob is very important to keep
+        # memory usage and load times managable. CPython (not sure about other
+        # implementations) guarantees that string index operations will be roughly
+        # constant time which flies right in the face of the efficient UTF-8 format.
+        # Hence why str instances transparently switch between Latin-1 and other
+        # constant-size formats. In the worst case a UCS-4 is used exploding
+        # memory usage (and load times as memory is not infinitely fast). I've seen
+        # peaks of 1GB max RSS with 100MB analyses which is just not OK.
+        # See also: https://stackoverflow.com/a/58080893
+        json.dump(raw, f, separators=(",", ":"), ensure_ascii=True)
         f.write("\n")
 
     console.line()
@@ -333,12 +338,12 @@ def show(
 
             console.print(Syntax(getattr(result, field_key), "python"))
 
-        elif isinstance(result, NothingChangedResult):
+        elif result.type == "nothing-changed":
             console.print("[bold nothing-changed]Nothing-changed.")
-        elif isinstance(result, FailedResult):
+        elif result.type == "failed":
             console.print(f"[error]{escape(result.error)}")
             console.print(f"[info]-> {escape(result.message)}")
-        elif isinstance(result, ReformattedResult):
+        elif result.type == "reformatted":
             diff = unified_diff(result.src, result.dst, f"a/{file_key}", f"b/{file_key}")
             console.print(color_diff(diff), highlight=False)
 

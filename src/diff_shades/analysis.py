@@ -61,30 +61,32 @@ JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
 
 
-@dataclasses.dataclass(frozen=True, init=False)
-class FileResult:
-    type: ResultTypes
+class _FileResultBase:
+    pass
+
+
+@dataclasses.dataclass(frozen=True, eq=True)
+class NothingChangedResult(_FileResultBase):
+    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
     src: str
 
 
 @dataclasses.dataclass(frozen=True)
-class NothingChangedResult(FileResult):
-    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
-
-
-@dataclasses.dataclass(frozen=True)
-class ReformattedResult(FileResult):
+class ReformattedResult(_FileResultBase):
     type: Literal["reformatted"] = field(default="reformatted", init=False)
+    src: str
     dst: str
 
 
 @dataclasses.dataclass(frozen=True)
-class FailedResult(FileResult):
+class FailedResult(_FileResultBase):
     type: Literal["failed"] = field(default="failed", init=False)
+    src: str
     error: str
     message: str
 
 
+FileResult = Union[FailedResult, ReformattedResult, NothingChangedResult]
 ProjectName = str
 ProjectResults = Dict[str, FileResult]
 
@@ -95,22 +97,24 @@ class Analysis:
     results: Dict[ProjectName, ProjectResults]
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
+    @staticmethod
+    def _parse_file_result(r: JSON) -> FileResult:
+        if r["type"] == "reformatted":
+            return ReformattedResult(r["src"], dst=r["dst"])
+        if r["type"] == "nothing-changed":
+            return NothingChangedResult(r["src"])
+        if r["type"] == "failed":
+            return FailedResult(r["src"], error=r["error"], message=r["message"])
+
+        raise ValueError(f"unsupported file result type: {r['type']}")
+
     @classmethod
     def load(cls, data: JSON) -> "Analysis":
         projects = {name: Project(**config) for name, config in data["projects"].items()}
         results = {}
         for project_name, project_results in data["results"].items():
             for filepath, result in project_results.items():
-                obj: FileResult
-                if result["type"] == "reformatted":
-                    obj = ReformattedResult(result["src"], dst=result["dst"])
-                elif result["type"] == "nothing-changed":
-                    obj = NothingChangedResult(result["src"])
-                elif result["type"] == "failed":
-                    obj = FailedResult(
-                        result["src"], error=result["error"], message=result["message"]
-                    )
-                project_results[filepath] = obj
+                project_results[filepath] = cls._parse_file_result(result)
             results[project_name] = project_results
 
         metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
@@ -246,9 +250,12 @@ def setup_projects(
 
 @contextmanager
 def suppress_output() -> Iterator:
+    from unittest.mock import patch
+
     with open(os.devnull, "w", encoding="utf-8") as blackhole:
         with redirect_stdout(blackhole), redirect_stderr(blackhole):
-            yield
+            with patch("click.echo", new=lambda *args, **kwargs: None):
+                yield
 
 
 # HACK: I know this is hacky but the benefit is I don't need to copy and
