@@ -49,6 +49,7 @@ target-version = ["py37", "py38", "py39"]
 
 [tool.isort]
 profile = "black"
+line_length = 90
 skip_gitignore = true
 py_version = "37"
 known_third_party = ["click", "packaging", "rich", "black", "nox", "platformdirs"]

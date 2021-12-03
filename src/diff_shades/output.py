@@ -13,20 +13,15 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
 
-from diff_shades.analysis import (
-    Analysis,
-    ResultTypes,
-    filter_results,
-    get_overall_result,
-)
+from diff_shades.results import Analysis, ResultTypes, filter_results, get_overall_result
 
 console = rich.get_console()
 
 
 def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
     """Return a unified diff string between strings `a` and `b`."""
-    a_lines = [line for line in a.splitlines(keepends=True)]
-    b_lines = [line for line in b.splitlines(keepends=True)]
+    a_lines = a.splitlines(keepends=True)
+    b_lines = b.splitlines(keepends=True)
     diff_lines = []
     for line in difflib.unified_diff(
         a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5

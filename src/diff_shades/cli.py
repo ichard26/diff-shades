@@ -3,18 +3,14 @@
 # ============================
 
 import dataclasses
-import hashlib
 import json
 import os
-import pickle
 import sys
-import time
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Optional, Set, Tuple
-from zipfile import ZipFile
+from typing import ContextManager, Optional, Set
 
 if sys.version_info >= (3, 8):
     from typing import Final
@@ -22,7 +18,6 @@ else:
     from typing_extensions import Final
 
 import click
-import platformdirs
 import rich
 import rich.traceback
 from rich.markup import escape
@@ -31,14 +26,7 @@ from rich.syntax import Syntax
 from rich.theme import Theme
 
 import diff_shades
-from diff_shades.analysis import (
-    GIT_BIN,
-    RESULT_COLORS,
-    Analysis,
-    analyze_projects,
-    filter_results,
-    setup_projects,
-)
+from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
 from diff_shades.output import (
     color_diff,
@@ -46,72 +34,12 @@ from diff_shades.output import (
     make_rich_progress,
     unified_diff,
 )
+from diff_shades.results import CACHE_DIR, Analysis, filter_results, load_analysis
 
 console: Final = rich.get_console()
 normalize_input: Final = (
     lambda ctx, param, val: val.casefold() if val is not None else None
 )
-
-CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
-CACHE_MAX_ENTRIES: Final = 3
-CACHE_LAST_ACCESS_CUTOFF: Final = 60 * 60 * 24 * 5
-
-os.makedirs(CACHE_DIR, exist_ok=True)
-
-
-def _clear_cache(*, ensure_room: bool = False) -> None:
-    """
-    Clears out old and unused analysis caches.
-
-    By default all cached analyses may be evicted. To also make sure there's a spot
-    available for one new entry please set :only_ensure_room: to True.
-    """
-    entries = [(entry, entry.stat().st_atime) for entry in CACHE_DIR.iterdir()]
-    by_oldest = sorted(entries, key=lambda x: x[1])
-    while len(by_oldest) > CACHE_MAX_ENTRIES - int(ensure_room):
-        by_oldest[0][0].unlink()
-        by_oldest.pop(0)
-    for entry, atime in by_oldest:
-        if time.time() - atime > CACHE_LAST_ACCESS_CUTOFF:
-            print(f"too old: {entry}")
-            entry.unlink()
-
-
-def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
-    _clear_cache()
-    filepath = filepath.resolve()
-    stat = filepath.stat()
-    cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"
-    hasher = hashlib.blake2b(cache_key.encode("utf-8"), digest_size=15)
-    short_key = hasher.hexdigest()
-
-    cache_path = Path(CACHE_DIR, f"{short_key}.pickle")
-    if cache_path.exists():
-        try:
-            analysis = pickle.loads(cache_path.read_bytes())
-        except Exception:
-            cache_path.unlink()
-        else:
-            return analysis, True
-
-    if filepath.name.endswith(".zip"):
-        with ZipFile(filepath) as zfile:
-            entries = zfile.infolist()
-            if len(entries) > 1:
-                # TODO: improve the error message handling for the whole tool
-                raise ValueError(
-                    f"{filepath} contains more than one member."
-                    " Please unzip and pass the right file manually."
-                )
-
-            with zfile.open(entries[0]) as f:
-                blob = f.read().decode("utf-8")
-    else:
-        blob = filepath.read_text("utf-8")
-    analysis = Analysis.load(json.loads(blob))
-    _clear_cache(ensure_room=True)
-    cache_path.write_bytes(pickle.dumps(analysis, protocol=4))
-    return analysis, False
 
 
 @click.group()
@@ -157,6 +85,7 @@ def main(no_color: Optional[bool]) -> None:
     })
     # fmt: on
     rich.reconfigure(log_path=False, color_system=color_mode_key[no_color], theme=theme)
+    os.makedirs(CACHE_DIR, exist_ok=True)
 
 
 # fmt: off
@@ -168,13 +97,13 @@ def main(no_color: Optional[bool]) -> None:
 @click.option(
     "-s", "--select",
     multiple=True,
-    callback=lambda ctx, param, values: set(p.strip().casefold() for p in values),
+    callback=lambda ctx, param, values: {p.strip().casefold() for p in values},
     help="Select projects from the main list."
 )
 @click.option(
     "-e", "--exclude",
     multiple=True,
-    callback=lambda ctx, param, values: set(p.strip().casefold() for p in values),
+    callback=lambda ctx, param, values: {p.strip().casefold() for p in values},
     help="Exclude projects from running."
 )
 @click.option(

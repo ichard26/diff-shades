@@ -15,6 +15,10 @@ repos:
     rev: 4.0.1
     hooks:
       - id: flake8
+        additional_dependencies:
+          - flake8-bugbear
+          - flake8-comprehensions
+          - flake8-simplify
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.9.3

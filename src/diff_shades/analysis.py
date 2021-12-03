@@ -2,33 +2,20 @@
 # > Formatting results collection
 # =============================
 
-import dataclasses
 import os
 import shutil
 import subprocess
 import sys
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
-from dataclasses import field, replace
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterator,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple
 
 if sys.version_info >= (3, 8):
-    from typing import Final, Literal
+    from typing import Final
 else:
-    from typing_extensions import Final, Literal
+    from typing_extensions import Final
 
 if TYPE_CHECKING:
     import black
@@ -37,6 +24,14 @@ import rich
 import rich.progress
 
 from diff_shades.config import Project
+from diff_shades.results import (
+    FailedResult,
+    FileResult,
+    NothingChangedResult,
+    ProjectResults,
+    ReformattedResult,
+    get_overall_result,
+)
 
 GIT_BIN: Final = shutil.which("git")
 RESULT_COLORS: Final = {
@@ -52,134 +47,6 @@ run_cmd: Final = partial(
     stderr=subprocess.STDOUT,
 )
 console: Final = rich.get_console()
-
-# ============================================
-# > Analysis data representation & processing
-# ==========================================
-
-JSON = Any
-ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
-
-
-class _FileResultBase:
-    pass
-
-
-@dataclasses.dataclass(frozen=True, eq=True)
-class NothingChangedResult(_FileResultBase):
-    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
-    src: str
-
-
-@dataclasses.dataclass(frozen=True)
-class ReformattedResult(_FileResultBase):
-    type: Literal["reformatted"] = field(default="reformatted", init=False)
-    src: str
-    dst: str
-
-
-@dataclasses.dataclass(frozen=True)
-class FailedResult(_FileResultBase):
-    type: Literal["failed"] = field(default="failed", init=False)
-    src: str
-    error: str
-    message: str
-
-
-FileResult = Union[FailedResult, ReformattedResult, NothingChangedResult]
-ProjectName = str
-ProjectResults = Dict[str, FileResult]
-
-
-@dataclasses.dataclass
-class Analysis:
-    projects: Dict[ProjectName, Project]
-    results: Dict[ProjectName, ProjectResults]
-    metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    @staticmethod
-    def _parse_file_result(r: JSON) -> FileResult:
-        if r["type"] == "reformatted":
-            return ReformattedResult(r["src"], dst=r["dst"])
-        if r["type"] == "nothing-changed":
-            return NothingChangedResult(r["src"])
-        if r["type"] == "failed":
-            return FailedResult(r["src"], error=r["error"], message=r["message"])
-
-        raise ValueError(f"unsupported file result type: {r['type']}")
-
-    @classmethod
-    def load(cls, data: JSON) -> "Analysis":
-        projects = {name: Project(**config) for name, config in data["projects"].items()}
-        results = {}
-        for project_name, project_results in data["results"].items():
-            for filepath, result in project_results.items():
-                project_results[filepath] = cls._parse_file_result(result)
-            results[project_name] = project_results
-
-        metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
-        return cls(projects=projects, results=results, metadata=metadata)
-
-    def __iter__(self) -> Iterator[ProjectResults]:
-        return iter(self.results.values())
-
-    @property
-    def files(self) -> Dict[str, FileResult]:
-        files: Dict[str, FileResult] = {}
-        for proj, proj_results in self.results.items():
-            for file, file_result in proj_results.items():
-                files[f"{proj}:{file}"] = file_result
-        return files
-
-
-@overload
-def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["reformatted"]
-) -> Mapping[str, ReformattedResult]:
-    ...
-
-
-@overload
-def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["failed"]
-) -> Mapping[str, FailedResult]:
-    ...
-
-
-@overload
-def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["nothing-changed"]
-) -> Mapping[str, NothingChangedResult]:
-    ...
-
-
-@overload
-def filter_results(
-    file_results: Mapping[str, FileResult], type: str
-) -> Mapping[str, FileResult]:
-    ...
-
-
-def filter_results(
-    file_results: Mapping[str, FileResult], type: str
-) -> Mapping[str, FileResult]:
-    return {file: result for file, result in file_results.items() if result.type == type}
-
-
-def get_overall_result(
-    results: Union[ProjectResults, Sequence[FileResult]]
-) -> ResultTypes:
-    results = list(results.values()) if isinstance(results, dict) else results
-    results_by_type = [r.type for r in results]
-    if "failed" in results_by_type:
-        return "failed"
-
-    if "reformatted" in results_by_type:
-        return "reformatted"
-
-    assert [r.type == "nothing-changed" for r in results]
-    return "nothing-changed"
-
 
 # =====================
 # > Setup and analysis
