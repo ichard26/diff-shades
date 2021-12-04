@@ -2,6 +2,7 @@
 # > Messaging and reporting utilities
 # =================================
 
+import textwrap
 from collections import Counter
 from datetime import datetime
 from typing import cast
@@ -11,6 +12,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
+from rich.text import Text
 
 from diff_shades.results import Analysis, ResultTypes, filter_results, get_overall_result
 
@@ -71,12 +73,23 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
         project_table.add_row(type, str(count), style=type)
     stats_table.add_row(file_table, "   ", project_table)
     main_table.add_row(stats_table)
-    main_table.add_row(
-        f"\n# of lines: {readable_int(analysis.line_count)}\n"
-        f"# of files: {len(analysis.files())}\n"
-        f"# of projects: {len(analysis.projects)}",
-        style="bold",
+    additions, deletions = analysis.line_changes
+    left_stats = f"""
+        [bold]# of lines: {readable_int(analysis.line_count)}
+        # of files: {len(analysis.files())}
+        # of projects: {len(analysis.projects)}\
+    """
+    right_stats = (
+        f"\n\n\n[green]{readable_int(additions)} additions[/]"
+        f" - [red]{readable_int(deletions)} deletions[/]"
+        f" [[bold]{readable_int(additions + deletions)} total]"
     )
+    stats_table_two = Table.grid(expand=True)
+    stats_table_two.add_row(
+        textwrap.dedent(left_stats),
+        Text.from_markup(right_stats, justify="right"),
+    )
+    main_table.add_row(stats_table_two)
     created_at = datetime.fromisoformat(analysis.metadata["created-at"])
     subtitle = (
         f"[dim]black {analysis.metadata['black-version']} -"

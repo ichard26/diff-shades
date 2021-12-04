@@ -25,7 +25,7 @@ import diff_shades
 from diff_shades.config import Project
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
-CACHE_MAX_ENTRIES: Final = 3
+CACHE_MAX_ENTRIES: Final = 5
 CACHE_LAST_ACCESS_CUTOFF: Final = 60 * 60 * 24 * 5
 JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]

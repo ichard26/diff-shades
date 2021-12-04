@@ -231,10 +231,10 @@ def analyze(
     type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
 )
 @click.argument(
-    "project_key", metavar="project", callback=normalize_input, required=False
+    "project_key", metavar="[project]", callback=normalize_input, required=False
 )
-@click.argument("file_key", metavar="file", required=False)
-@click.argument("field_key", metavar="field", callback=normalize_input, required=False)
+@click.argument("file_key", metavar="[file]", required=False)
+@click.argument("field_key", metavar="[field]", callback=normalize_input, required=False)
 def show(
     analysis_path: Path,
     project_key: Optional[str],
