@@ -28,12 +28,7 @@ from rich.theme import Theme
 import diff_shades
 from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
-from diff_shades.output import (
-    color_diff,
-    make_analysis_summary,
-    make_rich_progress,
-    unified_diff,
-)
+from diff_shades.output import color_diff, make_analysis_summary, make_rich_progress
 from diff_shades.results import CACHE_DIR, Analysis, filter_results, load_analysis
 
 console: Final = rich.get_console()
@@ -202,6 +197,7 @@ def analyze(
         metadata = {
             "black-version": black.__version__,
             "created-at": datetime.now(timezone.utc).isoformat(),
+            "data-format": 1,
         }
         analysis = Analysis(
             projects={proj.name: proj for proj in projects},
@@ -273,7 +269,7 @@ def show(
             console.print(f"[error]{escape(result.error)}")
             console.print(f"[info]-> {escape(result.message)}")
         elif result.type == "reformatted":
-            diff = unified_diff(result.src, result.dst, f"a/{file_key}", f"b/{file_key}")
+            diff = result.diff(file_key)
             console.print(color_diff(diff), highlight=False)
 
     elif project_key and not file_key:

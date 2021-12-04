@@ -2,14 +2,16 @@
 # > Analysis data representation & processing
 # ==========================================
 
+import difflib
 import hashlib
 import json
 import pickle
 import sys
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping, Sequence, Tuple, Union, overload
+from typing import Any, Dict, Iterator, Mapping, Sequence, Tuple, Type, Union, overload
 from zipfile import ZipFile
 
 if sys.version_info >= (3, 8):
@@ -29,14 +31,44 @@ JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
 
 
+def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
+    """Return a unified diff string between strings `a` and `b`."""
+    a_lines = a.splitlines(keepends=True)
+    b_lines = b.splitlines(keepends=True)
+    diff_lines = []
+    for line in difflib.unified_diff(
+        a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5
+    ):
+        # Work around https://bugs.python.org/issue2142. See also:
+        # https://www.gnu.org/software/diffutils/manual/html_node/Incomplete-Lines.html
+        if line[-1] == "\n":
+            diff_lines.append(line)
+        else:
+            diff_lines.append(line + "\n")
+            diff_lines.append("\\ No newline at end of file\n")
+    return "".join(diff_lines)
+
+
 class _FileResultBase:
-    pass
+    def __init__(self) -> None:
+        self.src: str
+        self.line_count: int
+
+    def __post_init__(self) -> None:
+        if self.line_count == -1:
+            lines = max(1, self.src.count("\n"))
+            object.__setattr__(self, "line_count", lines)
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True)
 class NothingChangedResult(_FileResultBase):
     type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
     src: str
+    line_count: int = -1
+
+    @property
+    def line_changes(self) -> Tuple[int, int]:
+        return (0, 0)
 
 
 @dataclass(frozen=True)
@@ -44,6 +76,24 @@ class ReformattedResult(_FileResultBase):
     type: Literal["reformatted"] = field(default="reformatted", init=False)
     src: str
     dst: str
+    line_count: int = -1
+    line_changes: Tuple[int, int] = (-1, -1)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.line_changes == (-1, -1):
+            additions = 0
+            deletions = 0
+            for line in self.diff(":daylily:"):
+                if line[0] == "+" and not line.startswith("+++"):
+                    additions += 1
+                elif line[0] == "-" and not line.startswith("---"):
+                    deletions += 1
+            object.__setattr__(self, "line_changes", (additions, deletions))
+
+    @lru_cache(maxsize=None)
+    def diff(self, filepath: str) -> str:
+        return unified_diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}")
 
 
 @dataclass(frozen=True)
@@ -52,11 +102,39 @@ class FailedResult(_FileResultBase):
     src: str
     error: str
     message: str
+    line_count: int = -1
+
+    @property
+    def line_changes(self) -> Tuple[int, int]:
+        return (0, 0)
 
 
 FileResult = Union[FailedResult, ReformattedResult, NothingChangedResult]
 ProjectName = str
-ProjectResults = Dict[str, FileResult]
+
+
+@dataclass(frozen=True)
+class ProjectResults(Mapping[str, FileResult]):
+    results: Dict[str, FileResult]
+
+    @property
+    def line_count(self) -> int:
+        return sum(r.line_count for r in self.values())
+
+    @property
+    def line_changes(self) -> Tuple[int, int]:
+        additions = sum(p.line_changes[0] for p in self.values())
+        deletions = sum(p.line_changes[1] for p in self.values())
+        return (additions, deletions)
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.results)
+
+    def __getitem__(self, key: str) -> FileResult:
+        return self.results[key]
 
 
 @dataclass
@@ -65,39 +143,26 @@ class Analysis:
     results: Dict[ProjectName, ProjectResults]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    @staticmethod
-    def _parse_file_result(r: JSON) -> FileResult:
-        if r["type"] == "reformatted":
-            return ReformattedResult(r["src"], dst=r["dst"])
-        if r["type"] == "nothing-changed":
-            return NothingChangedResult(r["src"])
-        if r["type"] == "failed":
-            return FailedResult(r["src"], error=r["error"], message=r["message"])
-
-        raise ValueError(f"unsupported file result type: {r['type']}")
-
-    @classmethod
-    def load(cls, data: JSON) -> "Analysis":
-        projects = {name: Project(**config) for name, config in data["projects"].items()}
-        results = {}
-        for project_name, project_results in data["results"].items():
-            for filepath, result in project_results.items():
-                project_results[filepath] = cls._parse_file_result(result)
-            results[project_name] = project_results
-
-        metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
-        return cls(projects=projects, results=results, metadata=metadata)
-
     def __iter__(self) -> Iterator[ProjectResults]:
         return iter(self.results.values())
 
-    @property
     def files(self) -> Dict[str, FileResult]:
         files: Dict[str, FileResult] = {}
         for proj, proj_results in self.results.items():
             for file, file_result in proj_results.items():
                 files[f"{proj}:{file}"] = file_result
+
         return files
+
+    @property
+    def line_count(self) -> int:
+        return sum(p.line_count for p in self)
+
+    @property
+    def line_changes(self) -> Tuple[int, int]:
+        additions = sum(p.line_changes[0] for p in self)
+        deletions = sum(p.line_changes[1] for p in self)
+        return (additions, deletions)
 
 
 @overload
@@ -135,9 +200,9 @@ def filter_results(
 
 
 def get_overall_result(
-    results: Union[ProjectResults, Sequence[FileResult]]
+    results: Union[Mapping[str, FileResult], Sequence[FileResult]]
 ) -> ResultTypes:
-    results = list(results.values()) if isinstance(results, dict) else results
+    results = list(results.values()) if isinstance(results, Mapping) else results
     results_by_type = [r.type for r in results]
     if "failed" in results_by_type:
         return "failed"
@@ -149,12 +214,9 @@ def get_overall_result(
     return "nothing-changed"
 
 
-def _clear_cache(*, ensure_room: bool = False) -> None:
+def clear_cache(*, ensure_room: bool = False) -> None:
     """
-    Clears out old and unused analysis caches.
-
-    By default all cached analyses may be evicted. To also make sure there's a spot
-    available for one new entry please set :only_ensure_room: to True.
+    Clears out old analysis caches.
     """
     entries = [(entry, entry.stat().st_atime) for entry in CACHE_DIR.iterdir()]
     by_oldest = sorted(entries, key=lambda x: x[1])
@@ -163,8 +225,34 @@ def _clear_cache(*, ensure_room: bool = False) -> None:
         by_oldest.pop(0)
     for entry, atime in by_oldest:
         if time.time() - atime > CACHE_LAST_ACCESS_CUTOFF:
-            print(f"too old: {entry}")
             entry.unlink()
+
+
+def load_analysis_contents(data: JSON) -> Analysis:
+    result_classes: Dict[str, Type[FileResult]] = {
+        "reformatted": ReformattedResult,
+        "nothing-changed": NothingChangedResult,
+        "failed": FailedResult,
+    }
+
+    def _parse_file_result(r: JSON) -> FileResult:
+        cls = result_classes[r["type"]]
+        del r["type"]
+        return cls(**r)
+
+    projects = {name: Project(**config) for name, config in data["projects"].items()}
+    metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
+    data_format = metadata.get("data-format", None)
+    if data_format != 1:
+        raise ValueError("unsupported analysis format: {data_format}")
+
+    results = {}
+    for project_name, project in data["results"].items():
+        for filepath, result in project["results"].items():
+            project["results"][filepath] = _parse_file_result(result)
+        results[project_name] = ProjectResults(**project)
+
+    return Analysis(projects=projects, results=results, metadata=metadata)
 
 
 def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
@@ -197,7 +285,7 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
                 blob = f.read().decode("utf-8")
     else:
         blob = filepath.read_text("utf-8")
-    analysis = Analysis.load(json.loads(blob))
-    _clear_cache(ensure_room=True)
+    analysis = load_analysis_contents(json.loads(blob))
+    clear_cache(ensure_room=True)
     cache_path.write_bytes(pickle.dumps(analysis, protocol=4))
     return analysis, False

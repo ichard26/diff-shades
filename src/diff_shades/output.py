@@ -2,7 +2,6 @@
 # > Messaging and reporting utilities
 # =================================
 
-import difflib
 from collections import Counter
 from datetime import datetime
 from typing import cast
@@ -16,24 +15,6 @@ from rich.table import Table
 from diff_shades.results import Analysis, ResultTypes, filter_results, get_overall_result
 
 console = rich.get_console()
-
-
-def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
-    """Return a unified diff string between strings `a` and `b`."""
-    a_lines = a.splitlines(keepends=True)
-    b_lines = b.splitlines(keepends=True)
-    diff_lines = []
-    for line in difflib.unified_diff(
-        a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5
-    ):
-        # Work around https://bugs.python.org/issue2142. See also:
-        # https://www.gnu.org/software/diffutils/manual/html_node/Incomplete-Lines.html
-        if line[-1] == "\n":
-            diff_lines.append(line)
-        else:
-            diff_lines.append(line + "\n")
-            diff_lines.append("\\ No newline at end of file\n")
-    return "".join(diff_lines)
 
 
 def color_diff(contents: str) -> str:
@@ -65,6 +46,13 @@ def make_rich_progress() -> Progress:
     )
 
 
+def readable_int(number: int) -> str:
+    if number < 10000:
+        return str(number)
+
+    return f"{number:,}".replace(",", " ")
+
+
 def make_analysis_summary(analysis: Analysis) -> Panel:
     main_table = Table.grid()
     stats_table = Table.grid()
@@ -75,7 +63,7 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     project_table.add_column("Result")
     project_table.add_column("# of projects")
     for type in ("nothing-changed", "reformatted", "failed"):
-        count = len(filter_results(analysis.files, type))
+        count = len(filter_results(analysis.files(), type))
         file_table.add_row(type, str(count), style=type)
     type_counts = Counter(get_overall_result(proj) for proj in analysis)
     for type in ("nothing-changed", "reformatted", "failed"):
@@ -84,7 +72,8 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     stats_table.add_row(file_table, "   ", project_table)
     main_table.add_row(stats_table)
     main_table.add_row(
-        f"\n# of files: {len(analysis.files)}\n"
+        f"\n# of lines: {readable_int(analysis.line_count)}\n"
+        f"# of files: {len(analysis.files())}\n"
         f"# of projects: {len(analysis.projects)}",
         style="bold",
     )
