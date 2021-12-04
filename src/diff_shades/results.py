@@ -110,6 +110,7 @@ class FailedResult(_FileResultBase):
 
 
 FileResult = Union[FailedResult, ReformattedResult, NothingChangedResult]
+NamedResults = Mapping[str, FileResult]
 ProjectName = str
 
 
@@ -165,43 +166,35 @@ class Analysis:
         return (additions, deletions)
 
 
+# fmt: off
 @overload
 def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["reformatted"]
+    results: NamedResults, type: Literal["reformatted"]
 ) -> Mapping[str, ReformattedResult]:
     ...
 
-
 @overload
 def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["failed"]
+    results: NamedResults, type: Literal["failed"]
 ) -> Mapping[str, FailedResult]:
     ...
 
-
 @overload
 def filter_results(
-    file_results: Mapping[str, FileResult], type: Literal["nothing-changed"]
+    results: NamedResults, type: Literal["nothing-changed"]
 ) -> Mapping[str, NothingChangedResult]:
     ...
 
-
 @overload
-def filter_results(
-    file_results: Mapping[str, FileResult], type: str
-) -> Mapping[str, FileResult]:
+def filter_results(results: NamedResults, type: str) -> NamedResults:
     ...
 
-
-def filter_results(
-    file_results: Mapping[str, FileResult], type: str
-) -> Mapping[str, FileResult]:
-    return {file: result for file, result in file_results.items() if result.type == type}
+def filter_results(results: NamedResults, type: str) -> NamedResults:
+    return {file: result for file, result in results.items() if result.type == type}
+# fmt: on
 
 
-def get_overall_result(
-    results: Union[Mapping[str, FileResult], Sequence[FileResult]]
-) -> ResultTypes:
+def get_overall_result(results: Union[NamedResults, Sequence[FileResult]]) -> ResultTypes:
     results = list(results.values()) if isinstance(results, Mapping) else results
     results_by_type = [r.type for r in results]
     if "failed" in results_by_type:
@@ -244,7 +237,7 @@ def load_analysis_contents(data: JSON) -> Analysis:
     metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
     data_format = metadata.get("data-format", None)
     if data_format != 1:
-        raise ValueError("unsupported analysis format: {data_format}")
+        raise ValueError(f"unsupported analysis format: {data_format}")
 
     results = {}
     for project_name, project in data["results"].items():

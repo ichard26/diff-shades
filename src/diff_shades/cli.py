@@ -32,8 +32,9 @@ from diff_shades.output import color_diff, make_analysis_summary, make_rich_prog
 from diff_shades.results import CACHE_DIR, Analysis, filter_results, load_analysis
 
 console: Final = rich.get_console()
-normalize_input: Final = (
-    lambda ctx, param, val: val.casefold() if val is not None else None
+normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
+READABLE_FILE: Final = click.Path(
+    resolve_path=True, exists=True, dir_okay=False, readable=True, path_type=Path
 )
 
 
@@ -41,8 +42,9 @@ normalize_input: Final = (
 @click.option(
     "--no-color/--force-color", default=None, help="Force disable/enable colored output."
 )
+@click.option("--show-locals", is_flag=True, help="Show locals for unhandled exceptions.")
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
-def main(no_color: Optional[bool]) -> None:
+def main(no_color: Optional[bool], show_locals: bool) -> None:
     """
     The Black shade analyser and comparison tool.
 
@@ -69,7 +71,7 @@ def main(no_color: Optional[bool]) -> None:
      - better UX (particularly when things go wrong)
      - code cleanup as my code is messy as usual :p
     """
-    rich.traceback.install(suppress=[click], show_locals=True)
+    rich.traceback.install(suppress=[click], show_locals=show_locals)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
     # fmt: off
     theme = Theme({
@@ -112,7 +114,7 @@ def main(no_color: Optional[bool]) -> None:
 )
 @click.option(
     "--repeat-projects-from",
-    type=click.Path(exists=True, dir_okay=False, file_okay=True, resolve_path=True, path_type=Path),
+    type=READABLE_FILE,
     help=(
         "Use the same projects (and commits!) used during another analysis."
         " This is similar to --work-dir but for when you don't have the"
@@ -185,7 +187,7 @@ def analyze(
         work_dir = Path(_work_dir)
         with make_rich_progress() as progress:
             setup_task = progress.add_task(
-                "[bold blue]Setting up projects", total=len(projects)
+                "[bold cyan]Setting up projects", total=len(projects)
             )
             projects = setup_projects(projects, work_dir, progress, setup_task, verbose)
 
@@ -225,11 +227,7 @@ def analyze(
 
 
 @main.command()
-@click.argument(
-    "analysis-path",
-    metavar="analysis",
-    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
-)
+@click.argument("analysis-path", metavar="analysis", type=READABLE_FILE)
 @click.argument(
     "project_key", metavar="[project]", callback=normalize_input, required=False
 )
@@ -284,19 +282,9 @@ def show(
 
 
 @main.command()
-@click.argument(
-    "analysis-one",
-    metavar="analysis-one",
-    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
-)
-@click.argument(
-    "analysis-two",
-    metavar="analysis-two",
-    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
-)
-@click.option(
-    "--check", is_flag=True, help="Return a non-zero exit code if differences were found."
-)
+@click.argument("analysis-one", metavar="analysis-one", type=READABLE_FILE)
+@click.argument("analysis-two", metavar="analysis-two", type=READABLE_FILE)
+@click.option("--check", is_flag=True, help="Return 1 if differences were found.")
 def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
     """Compare two analyses for differences in the results."""
 
@@ -328,15 +316,9 @@ def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
 
 
 @main.command("show-failed")
-@click.argument(
-    "analysis-path",
-    metavar="analysis",
-    type=click.Path(resolve_path=True, exists=True, readable=True, path_type=Path),
-)
+@click.argument("analysis-path", metavar="analysis", type=READABLE_FILE)
 @click.argument("key", metavar="project", callback=normalize_input, required=False)
-@click.option(
-    "--check", is_flag=True, help="Return a non-zero exit code if there's a failure."
-)
+@click.option("--check", is_flag=True, help="Return 1 if there's a failure.")
 def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
     """
     Show and check for failed files in an analysis.

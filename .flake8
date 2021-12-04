@@ -1,7 +1,7 @@
 [flake8]
 select = E704, C, E, F, W, B
 max-line-length = 100
-extend-ignore = E501, E203, E226, W503, W605, E122, E115
+extend-ignore = E501, E203, E226, W503, W605, E122, E115, E302
 extend-exclude =
     build,
     dist,

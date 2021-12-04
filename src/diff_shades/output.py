@@ -86,8 +86,7 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     )
     stats_table_two = Table.grid(expand=True)
     stats_table_two.add_row(
-        textwrap.dedent(left_stats),
-        Text.from_markup(right_stats, justify="right"),
+        textwrap.dedent(left_stats), Text.from_markup(right_stats, justify="right")
     )
     main_table.add_row(stats_table_two)
     created_at = datetime.fromisoformat(analysis.metadata["created-at"])
