@@ -215,7 +215,7 @@ def analyze_projects(
     def check_project_files(
         files: List[Path], project_path: Path, *, mode: "black.FileMode"
     ) -> ProjectResults:
-        file_results = {}
+        file_results = ProjectResults()
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
             if verbose:
@@ -223,7 +223,7 @@ def analyze_projects(
             file_results[filepath] = result
             progress.advance(task)
             progress.advance(project_task)
-        return ProjectResults(results=file_results)
+        return file_results
 
     with multiprocessing.Pool() as pool:
         results = {}

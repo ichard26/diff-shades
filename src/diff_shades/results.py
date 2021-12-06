@@ -114,10 +114,7 @@ NamedResults = Mapping[str, FileResult]
 ProjectName = str
 
 
-@dataclass(frozen=True)
-class ProjectResults(Mapping[str, FileResult]):
-    results: Dict[str, FileResult]
-
+class ProjectResults(Dict[str, FileResult]):
     @property
     def line_count(self) -> int:
         return sum(r.line_count for r in self.values())
@@ -127,15 +124,6 @@ class ProjectResults(Mapping[str, FileResult]):
         additions = sum(p.line_changes[0] for p in self.values())
         deletions = sum(p.line_changes[1] for p in self.values())
         return (additions, deletions)
-
-    def __len__(self) -> int:
-        return len(self.results)
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.results)
-
-    def __getitem__(self, key: str) -> FileResult:
-        return self.results[key]
 
 
 @dataclass
@@ -240,10 +228,10 @@ def load_analysis_contents(data: JSON) -> Analysis:
         raise ValueError(f"unsupported analysis format: {data_format}")
 
     results = {}
-    for project_name, project in data["results"].items():
-        for filepath, result in project["results"].items():
-            project["results"][filepath] = _parse_file_result(result)
-        results[project_name] = ProjectResults(**project)
+    for project_name, project_results in data["results"].items():
+        for filepath, result in project_results.items():
+            project_results[filepath] = _parse_file_result(result)
+        results[project_name] = ProjectResults(project_results)
 
     return Analysis(projects=projects, results=results, metadata=metadata)
 

@@ -29,7 +29,13 @@ import diff_shades
 from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
 from diff_shades.output import color_diff, make_analysis_summary, make_rich_progress
-from diff_shades.results import CACHE_DIR, Analysis, filter_results, load_analysis
+from diff_shades.results import (
+    CACHE_DIR,
+    Analysis,
+    filter_results,
+    load_analysis,
+    unified_diff,
+)
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
@@ -282,37 +288,69 @@ def show(
 
 
 @main.command()
-@click.argument("analysis-one", metavar="analysis-one", type=READABLE_FILE)
-@click.argument("analysis-two", metavar="analysis-two", type=READABLE_FILE)
+@click.argument("analysis-path1", metavar="analysis-one", type=READABLE_FILE)
+@click.argument("analysis-path2", metavar="analysis-two", type=READABLE_FILE)
+@click.argument("project_key", metavar="[project]", required=False)
 @click.option("--check", is_flag=True, help="Return 1 if differences were found.")
-def compare(analysis_one: Path, analysis_two: Path, check: bool) -> None:
+@click.option("--diff", "diff_mode", is_flag=True, help="Show a diff of the differences.")
+@click.option("--list", "list_mode", is_flag=True, help="List the differing files.")
+def compare(
+    analysis_path1: Path,
+    analysis_path2: Path,
+    check: bool,
+    project_key: Optional[str],
+    diff_mode: bool,
+    list_mode: bool,
+) -> None:
     """Compare two analyses for differences in the results."""
+
+    if diff_mode and list_mode:
+        console.print("[error]--diff and --list can't be used at the same time.")
+        sys.exit(1)
 
     # TODO: allow filtering of projects and files checked
     # TODO: more informative output (in particular on the differences)
 
-    first, cached = load_analysis(analysis_one)
-    console.log(f"Loaded first analysis: {analysis_one}{' (cached)' if cached else ''}")
-    second, cached = load_analysis(analysis_two)
-    console.log(f"Loaded second analysis: {analysis_two}{' (cached)' if cached else ''}")
+    analysis_one, cached = load_analysis(analysis_path1)
+    console.log(f"Loaded analysis one: {analysis_path1}{' (cached)' if cached else ''}")
+    analysis_two, cached = load_analysis(analysis_path2)
+    console.log(f"Loaded analysis two: {analysis_path2}{' (cached)' if cached else ''}")
 
-    # TODO: Gracefully warn but accept analyses that weren't set up the exact same way.
-    if set(first.projects) ^ set(second.projects) or not all(
-        first.projects[name] == second.projects[name] for name in first.projects
-    ):
-        console.print("[error]\nThe two analyses don't have the same set of projects.")
-        console.print(
-            "[italic]-> Eventually this will be just a warning, but that's a TODO"
-        )
-        sys.exit(1)
+    names = set(list(analysis_one.projects) + list(analysis_two.projects))
+    shared_projects = []
+    for n in sorted(names):
+        if n not in analysis_one.projects or n not in analysis_two.projects:
+            console.log(f"[warning]Skipping {n} as it's not present in both.")
+        elif analysis_one.projects[n] != analysis_two.projects[n]:
+            console.log(f"[warning]Skipping {n} as it was configured differently.")
+        else:
+            shared_projects.append((analysis_one.results[n], analysis_two.results[n]))
 
     console.line()
-    if first.results == second.results:
+    if all(proj1 == proj2 for proj1, proj2 in shared_projects):
         console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
+
+    if diff_mode:
+        for proj1, proj2 in shared_projects:
+            for file, r1, r2 in zip(proj1, proj1.values(), proj2.values()):
+                if r1.type == "failed" or r2.type == "failed":
+                    # It's probably worth flagging up new / fixed crashes but that's a TODO.
+                    continue
+
+                if r1 != r2:
+                    first_dst = r1.dst if r1.type == "reformatted" else r1.src
+                    second_dst = r2.dst if r2.type == "reformatted" else r2.src
+                    diff = unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
+                    console.print(color_diff(diff), highlight=False)
+
+    elif list_mode:
+        console.print("[error]--list is not implemented yet")
+        sys.exit(1)
     else:
         console.print("[bold][reformatted]Differences found.")
-        sys.exit(1 if check else 0)
+
+    sys.exit(1 if check else 0)
 
 
 @main.command("show-failed")

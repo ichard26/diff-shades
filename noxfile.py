@@ -18,7 +18,7 @@ def smoke_tests(session: nox.Session) -> None:
     base = ["diff-shades", "--force-color"]
     session.run(*base, "analyze", str(target), "-s", "blackbench", "-w", str(cache))
     session.run(
-        *base, "analyze", str(target), "-s", "blackbench", "-s", "black", "-w", str(cache)
+        *base, "analyze", str(target), "-s", "blackbench", "-s", "ptr", "-w", str(cache)
     )
     session.run(*base, "show", str(target))
     session.run(*base, "show", str(target), "blackbench", "docs/conf.py")
