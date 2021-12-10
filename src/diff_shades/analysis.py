@@ -131,9 +131,7 @@ def suppress_output() -> Iterator:
 # directly invoke black.format_file_contents :D
 
 
-def get_project_files_and_mode(
-    project: Project, path: Path
-) -> Tuple[List[Path], "black.FileMode"]:
+def get_files_and_mode(project: Project, path: Path) -> Tuple[List[Path], "black.Mode"]:
     # This pulls in a ton of stuff including the heavy asyncio. Let's avoid the import cost
     # unless till the last possible moment.
     from unittest.mock import patch
@@ -149,9 +147,8 @@ def get_project_files_and_mode(
         mode = kwargs["mode"]
 
     with suppress_output(), patch("black.reformat_many", new=shim):
-        black.main(
-            [str(path), *project.custom_arguments, "--check"], standalone_mode=False
-        )
+        cmd = [str(path), *project.custom_arguments, "--check"]
+        black.main(cmd, standalone_mode=False)
 
     assert files and isinstance(mode, black.FileMode)
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
@@ -206,7 +203,7 @@ def analyze_projects(
 
     # TODO: refactor this and related functions cuz it's a bit of a mess :)
     files_and_modes = [
-        get_project_files_and_mode(proj, work_dir / proj.name) for proj in projects
+        get_files_and_mode(proj, work_dir / proj.name) for proj in projects
     ]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)

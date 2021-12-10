@@ -2,6 +2,7 @@
 # > Command implementations
 # ============================
 
+import atexit
 import dataclasses
 import json
 import os
@@ -26,22 +27,28 @@ from rich.syntax import Syntax
 from rich.theme import Theme
 
 import diff_shades
+import diff_shades.results
 from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
 from diff_shades.output import color_diff, make_analysis_summary, make_rich_progress
-from diff_shades.results import (
-    CACHE_DIR,
-    Analysis,
-    filter_results,
-    load_analysis,
-    unified_diff,
-)
+from diff_shades.results import CACHE_DIR, Analysis, filter_results, unified_diff
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
 READABLE_FILE: Final = click.Path(
     resolve_path=True, exists=True, dir_okay=False, readable=True, path_type=Path
 )
+WRITABLE_FILE: Final = click.Path(
+    resolve_path=True, dir_okay=False, readable=False, writable=True, path_type=Path
+)
+
+
+def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Analysis:
+    analysis, cached = diff_shades.results.load_analysis(path)
+    if not quiet:
+        console.log(f"Loaded {msg}: {path}{' (cached)' if cached else ''}")
+
+    return analysis
 
 
 @click.group()
@@ -49,8 +56,11 @@ READABLE_FILE: Final = click.Path(
     "--no-color/--force-color", default=None, help="Force disable/enable colored output."
 )
 @click.option("--show-locals", is_flag=True, help="Show locals for unhandled exceptions.")
+@click.option(
+    "--dump-html", type=WRITABLE_FILE, help="Save a HTML copy of the emitted output."
+)
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
-def main(no_color: Optional[bool], show_locals: bool) -> None:
+def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path]) -> None:
     """
     The Black shade analyser and comparison tool.
 
@@ -79,6 +89,7 @@ def main(no_color: Optional[bool], show_locals: bool) -> None:
     """
     rich.traceback.install(suppress=[click], show_locals=show_locals)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
+    color_mode = color_mode_key[no_color]
     # fmt: off
     theme = Theme({
         "error": "bold red",
@@ -87,16 +98,17 @@ def main(no_color: Optional[bool], show_locals: bool) -> None:
         **RESULT_COLORS
     })
     # fmt: on
-    rich.reconfigure(log_path=False, color_system=color_mode_key[no_color], theme=theme)
+    rich.reconfigure(
+        log_path=False, record=dump_html, color_system=color_mode, theme=theme
+    )
     os.makedirs(CACHE_DIR, exist_ok=True)
+    if dump_html:
+        atexit.register(console.save_html, path=dump_html)
 
 
 # fmt: off
 @main.command()
-@click.argument(
-    "results-path", metavar="results-filepath",
-    type=click.Path(resolve_path=True, readable=False, writable=True, path_type=Path)
-)
+@click.argument("results-path", metavar="results-filepath", type=WRITABLE_FILE)
 @click.option(
     "-s", "--select",
     multiple=True,
@@ -163,11 +175,7 @@ def analyze(
         sys.exit(1)
 
     if repeat_projects_from:
-        analysis, cached = load_analysis(repeat_projects_from)
-        console.log(
-            f"[bold]Loaded blueprint analysis: {repeat_projects_from}"
-            + (" (cached)" if cached else "")
-        )
+        analysis = load_analysis(repeat_projects_from, msg="blueprint analysis")
         projects = list(analysis.projects.values())
     else:
         projects = PROJECTS
@@ -178,10 +186,8 @@ def analyze(
     for proj in projects:
         if not proj.supported_by_runtime:
             projects.remove(proj)
-            console.log(
-                "[warning]"
-                f"Skipping {proj.name} as it requires python{proj.python_requires}"
-            )
+            msg = f"[warning]Skipping {proj.name} as it requires python{proj.python_requires}"
+            console.log(msg)
 
     workdir_provider: ContextManager
     if work_dir:
@@ -192,25 +198,21 @@ def analyze(
     with workdir_provider as _work_dir:
         work_dir = Path(_work_dir)
         with make_rich_progress() as progress:
-            setup_task = progress.add_task(
-                "[bold cyan]Setting up projects", total=len(projects)
-            )
-            projects = setup_projects(projects, work_dir, progress, setup_task, verbose)
+            title = "[bold cyan]Setting up projects"
+            task1 = progress.add_task(title, total=len(projects))
+            projects = setup_projects(projects, work_dir, progress, task1, verbose)
 
         with make_rich_progress() as progress:
-            analyze_task = progress.add_task("[bold magenta]Running black")
-            results = analyze_projects(
-                projects, work_dir, progress, analyze_task, verbose
-            )
+            task2 = progress.add_task("[bold magenta]Running black")
+            results = analyze_projects(projects, work_dir, progress, task2, verbose)
+
         metadata = {
             "black-version": black.__version__,
             "created-at": datetime.now(timezone.utc).isoformat(),
             "data-format": 1,
         }
         analysis = Analysis(
-            projects={proj.name: proj for proj in projects},
-            results=results,
-            metadata=metadata,
+            projects={p.name: p for p in projects}, results=results, metadata=metadata
         )
 
     with open(results_path, "w", encoding="utf-8") as f:
@@ -224,7 +226,7 @@ def analyze(
         # memory usage (and load times as memory is not infinitely fast). I've seen
         # peaks of 1GB max RSS with 100MB analyses which is just not OK.
         # See also: https://stackoverflow.com/a/58080893
-        json.dump(raw, f, separators=(",", ":"), ensure_ascii=True)
+        json.dump(raw, f, separators=(",", ":"), indent=2, ensure_ascii=True)
         f.write("\n")
 
     console.line()
@@ -248,8 +250,7 @@ def show(
     """
     Show results or metadata from an analysis.
     """
-    analysis, cached = load_analysis(analysis_path)
-    console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}")
+    analysis = load_analysis(analysis_path)
     console.line()
 
     if project_key and file_key:
@@ -311,10 +312,8 @@ def compare(
     # TODO: allow filtering of projects and files checked
     # TODO: more informative output (in particular on the differences)
 
-    analysis_one, cached = load_analysis(analysis_path1)
-    console.log(f"Loaded analysis one: {analysis_path1}{' (cached)' if cached else ''}")
-    analysis_two, cached = load_analysis(analysis_path2)
-    console.log(f"Loaded analysis two: {analysis_path2}{' (cached)' if cached else ''}")
+    analysis_one = load_analysis(analysis_path1, msg="first analysis")
+    analysis_two = load_analysis(analysis_path2, msg="second analysis")
 
     names = set(list(analysis_one.projects) + list(analysis_two.projects))
     shared_projects = []
@@ -361,8 +360,7 @@ def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
     """
     Show and check for failed files in an analysis.
     """
-    analysis, cached = load_analysis(analysis_path)
-    console.log(f"Loaded analysis: {analysis_path}{' (cached)' if cached else ''}\n")
+    analysis = load_analysis(analysis_path)
 
     if key and key not in analysis.projects:
         console.print(f"[error]The project '{key}' couldn't be found.")
