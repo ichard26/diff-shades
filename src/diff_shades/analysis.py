@@ -84,6 +84,7 @@ def setup_projects(
     task: rich.progress.TaskID,
     verbose: bool,
 ) -> List[Project]:
+    console = progress.console
     bold = "[bold]" if verbose else ""
     ready = []
     for proj in projects:
@@ -97,15 +98,16 @@ def setup_projects(
                 can_reuse = proj.commit == sha
 
         if can_reuse:
-            progress.console.log(f"{bold}Using pre-existing clone of {proj.name} - {proj.url}")
+            if verbose:
+                console.log(f"{bold}Using pre-existing clone of {proj.name} - {proj.url}")
         else:
             clone_repo(proj.url, to=target, sha=proj.commit)
-            progress.console.log(f"{bold}Cloned {proj.name} - {proj.url}")
+            console.log(f"{bold}Cloned {proj.name} - {proj.url}")
 
         commit_sha, commit_msg = get_commit(target)
         if verbose:
-            progress.console.log(f"[dim]  commit -> {commit_msg}", highlight=False)
-            progress.console.log(f"[dim]  commit -> {commit_sha}")
+            console.log(f"[dim]  commit -> {commit_msg}", highlight=False)
+            console.log(f"[dim]  commit -> {commit_sha}")
         proj = replace(proj, commit=commit_sha)
         ready.append(proj)
         progress.advance(task)

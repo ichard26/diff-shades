@@ -82,7 +82,7 @@ class ReformattedResult(_FileResultBase):
         if self.line_changes == (-1, -1):
             additions = 0
             deletions = 0
-            for line in self.diff(":daylily:"):
+            for line in self.diff(":daylily:").splitlines():
                 if line[0] == "+" and not line.startswith("+++"):
                     additions += 1
                 elif line[0] == "-" and not line.startswith("---"):
@@ -215,8 +215,9 @@ def load_analysis_contents(data: JSON) -> Analysis:
     }
 
     def _parse_file_result(r: JSON) -> FileResult:
-        cls = result_classes[r["type"]]
-        del r["type"]
+        cls = result_classes[r.pop("type")]
+        if "line_changes" in r:
+            r["line_changes"] = tuple(r["line_changes"])
         return cls(**r)
 
     projects = {name: Project(**config) for name, config in data["projects"].items()}
