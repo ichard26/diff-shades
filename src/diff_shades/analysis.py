@@ -97,9 +97,7 @@ def setup_projects(
                 can_reuse = proj.commit == sha
 
         if can_reuse:
-            progress.console.log(
-                f"{bold}Using pre-existing clone of {proj.name} - {proj.url}"
-            )
+            progress.console.log(f"{bold}Using pre-existing clone of {proj.name} - {proj.url}")
         else:
             clone_repo(proj.url, to=target, sha=proj.commit)
             progress.console.log(f"{bold}Cloned {proj.name} - {proj.url}")
@@ -202,9 +200,7 @@ def analyze_projects(
     multiprocessing.set_start_method("spawn")
 
     # TODO: refactor this and related functions cuz it's a bit of a mess :)
-    files_and_modes = [
-        get_files_and_mode(proj, work_dir / proj.name) for proj in projects
-    ]
+    files_and_modes = [get_files_and_mode(proj, work_dir / proj.name) for proj in projects]
     file_count = sum(len(files) for files, _ in files_and_modes)
     progress.update(task, total=file_count)
     bold = "[bold]" if verbose else ""

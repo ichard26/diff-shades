@@ -31,7 +31,7 @@ import diff_shades.results
 from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
 from diff_shades.output import color_diff, make_analysis_summary, make_rich_progress
-from diff_shades.results import CACHE_DIR, Analysis, filter_results, unified_diff
+from diff_shades.results import Analysis, FileResult, filter_results, unified_diff
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
@@ -49,6 +49,17 @@ def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Ana
         console.log(f"Loaded {msg}: {path}{' (cached)' if cached else ''}")
 
     return analysis
+
+
+def diff_two_results(r1: FileResult, r2: FileResult, file: str) -> str:
+    if "failed" in (r1.type, r2.type):
+        first_dst = f"[{r1.error}: {r1.message}]\n" if r1.type == "failed" else "[no crash]\n"
+        second_dst = f"[{r2.error}: {r2.message}]\n" if r2.type == "failed" else "[no crash]\n"
+    else:
+        first_dst = r1.dst if r1.type == "reformatted" else r1.src
+        second_dst = r2.dst if r2.type == "reformatted" else r2.src
+
+    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
 
 
 @click.group()
@@ -98,10 +109,8 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
         **RESULT_COLORS
     })
     # fmt: on
-    rich.reconfigure(
-        log_path=False, record=dump_html, color_system=color_mode, theme=theme
-    )
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    rich.reconfigure(log_path=False, record=dump_html, color_system=color_mode, theme=theme)
+    os.makedirs(diff_shades.results.CACHE_DIR, exist_ok=True)
     if dump_html:
         atexit.register(console.save_html, path=dump_html)
 
@@ -236,9 +245,7 @@ def analyze(
 
 @main.command()
 @click.argument("analysis-path", metavar="analysis", type=READABLE_FILE)
-@click.argument(
-    "project_key", metavar="[project]", callback=normalize_input, required=False
-)
+@click.argument("project_key", metavar="[project]", callback=normalize_input, required=False)
 @click.argument("file_key", metavar="[file]", required=False)
 @click.argument("field_key", metavar="[field]", callback=normalize_input, required=False)
 def show(
@@ -291,7 +298,7 @@ def show(
 @main.command()
 @click.argument("analysis-path1", metavar="analysis-one", type=READABLE_FILE)
 @click.argument("analysis-path2", metavar="analysis-two", type=READABLE_FILE)
-@click.argument("project_key", metavar="[project]", required=False)
+@click.argument("project_key", metavar="[project]", callback=normalize_input, required=False)
 @click.option("--check", is_flag=True, help="Return 1 if differences were found.")
 @click.option("--diff", "diff_mode", is_flag=True, help="Show a diff of the differences.")
 @click.option("--list", "list_mode", is_flag=True, help="List the differing files.")
@@ -309,13 +316,13 @@ def compare(
         console.print("[error]--diff and --list can't be used at the same time.")
         sys.exit(1)
 
-    # TODO: allow filtering of projects and files checked
-    # TODO: more informative output (in particular on the differences)
-
     analysis_one = load_analysis(analysis_path1, msg="first analysis")
     analysis_two = load_analysis(analysis_path2, msg="second analysis")
 
-    names = set(list(analysis_one.projects) + list(analysis_two.projects))
+    if project_key is None:
+        names = set(list(analysis_one.projects) + list(analysis_two.projects))
+    else:
+        names = {project_key}
     shared_projects = []
     for n in sorted(names):
         if n not in analysis_one.projects or n not in analysis_two.projects:
@@ -323,24 +330,19 @@ def compare(
         elif analysis_one.projects[n] != analysis_two.projects[n]:
             console.log(f"[warning]Skipping {n} as it was configured differently.")
         else:
-            shared_projects.append((analysis_one.results[n], analysis_two.results[n]))
+            shared_projects.append((n, analysis_one.results[n], analysis_two.results[n]))
 
     console.line()
-    if all(proj1 == proj2 for proj1, proj2 in shared_projects):
+    if all(proj1 == proj2 for _, proj1, proj2 in shared_projects):
         console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
 
     if diff_mode:
-        for proj1, proj2 in shared_projects:
-            for file, r1, r2 in zip(proj1, proj1.values(), proj2.values()):
-                if r1.type == "failed" or r2.type == "failed":
-                    # It's probably worth flagging up new / fixed crashes but that's a TODO.
-                    continue
-
+        for proj, proj_results, proj_results2 in shared_projects:
+            for file, r1 in proj_results.items():
+                r2 = proj_results2[file]
                 if r1 != r2:
-                    first_dst = r1.dst if r1.type == "reformatted" else r1.src
-                    second_dst = r2.dst if r2.type == "reformatted" else r2.src
-                    diff = unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
+                    diff = diff_two_results(r1, r2, file=f"{proj}:{file}")
                     console.print(color_diff(diff), highlight=False)
 
     elif list_mode:

@@ -44,12 +44,12 @@ Home = "https://github.com/ichard26/diff-shades"
 name = "diff_shades"
 
 [tool.black]
-line-length = 90
+line-length = 95
 target-version = ["py37", "py38", "py39"]
 
 [tool.isort]
 profile = "black"
-line_length = 90
+line_length = 95
 skip_gitignore = true
 py_version = "37"
 known_third_party = ["click", "packaging", "rich", "black", "nox", "platformdirs"]

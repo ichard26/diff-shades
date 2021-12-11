@@ -36,9 +36,7 @@ def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
     a_lines = a.splitlines(keepends=True)
     b_lines = b.splitlines(keepends=True)
     diff_lines = []
-    for line in difflib.unified_diff(
-        a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5
-    ):
+    for line in difflib.unified_diff(a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5):
         # Work around https://bugs.python.org/issue2142. See also:
         # https://www.gnu.org/software/diffutils/manual/html_node/Incomplete-Lines.html
         if line[-1] == "\n":
