@@ -24,13 +24,19 @@ import rich.traceback
 from rich.markup import escape
 from rich.padding import Padding
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.theme import Theme
 
 import diff_shades
 import diff_shades.results
 from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
 from diff_shades.config import PROJECTS
-from diff_shades.output import color_diff, make_analysis_summary, make_rich_progress
+from diff_shades.output import (
+    color_diff,
+    make_analysis_summary,
+    make_rich_progress,
+    readable_int,
+)
 from diff_shades.results import Analysis, FileResult, filter_results, unified_diff
 
 console: Final = rich.get_console()
@@ -293,6 +299,37 @@ def show(
     else:
         panel = make_analysis_summary(analysis)
         console.print(panel)
+
+        console.line()
+        project_table = Table(show_edge=False, box=rich.box.SIMPLE)
+        project_table.add_column("Name")
+        project_table.add_column("Results (n/r/f)")
+        project_table.add_column("Line changes (total +/-)")
+        project_table.add_column("# files")
+        project_table.add_column("# lines")
+        for proj, proj_results in analysis.results.items():
+            results = ""
+            for type in ("nothing-changed", "reformatted", "failed"):
+                count = len(filter_results(proj_results, type))
+                results += f"[{type}]{count}[/]/"
+            results = results[:-1]
+
+            additions, deletions = proj_results.line_changes
+            if additions or deletions:
+                line_changes = (
+                    f"{readable_int(additions + deletions)}"
+                    f" [[green]{readable_int(additions)}[/]"
+                    f"/[red]{readable_int(deletions)}[/]]"
+                )
+            else:
+                line_changes = "n/a"
+            file_count = str(len(proj_results))
+            line_count = readable_int(proj_results.line_count)
+            color = proj_results.overall_result
+            project_table.add_row(
+                proj, results, line_changes, file_count, line_count, style=color
+            )
+        console.print(project_table)
 
 
 @main.command()

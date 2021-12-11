@@ -123,6 +123,10 @@ class ProjectResults(Dict[str, FileResult]):
         deletions = sum(p.line_changes[1] for p in self.values())
         return (additions, deletions)
 
+    @property
+    def overall_result(self) -> ResultTypes:
+        return get_overall_result(self)
+
 
 @dataclass
 class Analysis:

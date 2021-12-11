@@ -14,7 +14,7 @@ from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
-from diff_shades.results import Analysis, ResultTypes, filter_results, get_overall_result
+from diff_shades.results import Analysis, ResultTypes, filter_results
 
 console = rich.get_console()
 
@@ -67,7 +67,7 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     for type in ("nothing-changed", "reformatted", "failed"):
         count = len(filter_results(analysis.files(), type))
         file_table.add_row(type, str(count), style=type)
-    type_counts = Counter(get_overall_result(proj) for proj in analysis)
+    type_counts = Counter(proj.overall_result for proj in analysis)
     for type in ("nothing-changed", "reformatted", "failed"):
         count = type_counts.get(cast(ResultTypes, type), 0)
         project_table.add_row(type, str(count), style=type)

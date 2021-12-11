@@ -34,11 +34,7 @@ from diff_shades.results import (
 )
 
 GIT_BIN: Final = shutil.which("git")
-RESULT_COLORS: Final = {
-    "reformatted": "cyan",
-    "nothing-changed": "magenta",
-    "failed": "red",
-}
+RESULT_COLORS: Final = {"reformatted": "cyan", "nothing-changed": "magenta", "failed": "red"}
 run_cmd: Final = partial(
     subprocess.run,
     check=True,
