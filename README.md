@@ -193,6 +193,9 @@ __license__ = "MIT"
 __version__ = "21.12a2"
 ```
 
+If you're using `show` as part of a larger script, then `-q` / `--quiet` may be
+useful by suppressing non-essential output.
+
 **Note**: show-ing a project is currently not implemented and so are `--diff` /
 `--list` output modes.
 

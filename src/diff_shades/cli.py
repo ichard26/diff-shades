@@ -286,17 +286,20 @@ def analyze(
 @click.argument("project_key", metavar="[project]", callback=normalize_input, required=False)
 @click.argument("file_key", metavar="[file]", required=False)
 @click.argument("field_key", metavar="[field]", callback=normalize_input, required=False)
+@click.option("-q", "--quiet", is_flag=True, help="Suppress log messages.")
 def show(
     analysis_path: Path,
     project_key: Optional[str],
     file_key: Optional[str],
     field_key: Optional[str],
+    quiet: bool,
 ) -> None:
     """
     Show results or metadata from an analysis.
     """
-    analysis = load_analysis(analysis_path)
-    console.line()
+    analysis = load_analysis(analysis_path, quiet=quiet)
+    if not quiet:
+        console.line()
 
     if project_key and file_key:
         try:
