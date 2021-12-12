@@ -10,7 +10,7 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 if sys.version_info >= (3, 8):
     from typing import Final
@@ -30,7 +30,6 @@ from diff_shades.results import (
     NothingChangedResult,
     ProjectResults,
     ReformattedResult,
-    get_overall_result,
 )
 
 GIT_BIN: Final = shutil.which("git")
@@ -63,6 +62,7 @@ def clone_repo(url: str, *, to: Path, sha: Optional[str] = None) -> None:
 
 CommitMsg = str
 CommitSHA = str
+PreparedProject = Tuple[Project, List[Path], "black.Mode"]
 
 
 def get_commit(repo: Path) -> Tuple[CommitSHA, CommitMsg]:
@@ -76,10 +76,11 @@ def get_commit(repo: Path) -> Tuple[CommitSHA, CommitMsg]:
 def setup_projects(
     projects: List[Project],
     workdir: Path,
+    extra_args: Sequence[str],
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
     verbose: bool,
-) -> List[Project]:
+) -> List[PreparedProject]:
     console = progress.console
     bold = "[bold]" if verbose else ""
     ready = []
@@ -105,8 +106,10 @@ def setup_projects(
             console.log(f"[dim]  commit -> {commit_msg}", highlight=False)
             console.log(f"[dim]  commit -> {commit_sha}")
         proj = replace(proj, commit=commit_sha)
-        ready.append(proj)
+        files, mode = get_files_and_mode(proj, target, extra_args)
+        ready.append((proj, files, mode))
         progress.advance(task)
+        progress.refresh()
 
     return ready
 
@@ -121,13 +124,14 @@ def suppress_output() -> Iterator:
                 yield
 
 
-# HACK: I know this is hacky but the benefit is I don't need to copy and
-# paste a bunch of black's argument parsing, file discovery, and
-# configuration code. I also get to keep the pretty output since I can
-# directly invoke black.format_file_contents :D
-
-
-def get_files_and_mode(project: Project, path: Path) -> Tuple[List[Path], "black.Mode"]:
+def get_files_and_mode(
+    project: Project, path: Path, extra_args: Sequence[str] = ()
+) -> Tuple[List[Path], "black.Mode"]:
+    # HACK: I know this is hacky but the benefit is I don't need to copy and
+    # paste a bunch of black's argument parsing, file discovery, and
+    # configuration code. I also get to keep the pretty output since I can
+    # directly invoke black.format_file_contents :D
+    #
     # This pulls in a ton of stuff including the heavy asyncio. Let's avoid the import cost
     # unless till the last possible moment.
     from unittest.mock import patch
@@ -143,21 +147,18 @@ def get_files_and_mode(project: Project, path: Path) -> Tuple[List[Path], "black
         mode = kwargs["mode"]
 
     with suppress_output(), patch("black.reformat_many", new=shim):
-        cmd = [str(path), *project.custom_arguments, "--check"]
+        cmd = [str(path), *project.custom_arguments, *extra_args, "--check"]
         black.main(cmd, standalone_mode=False)
 
-    assert files and isinstance(mode, black.FileMode)
+    assert files and isinstance(mode, black.Mode)
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 
-def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileResult:
+def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult:
     import black
 
     # TODO: record log files if available
-    # TODO: allow more control w/ black.Mode so we could use diff-shades to compare
-    # for example, no-ESP vs ESP.
-
-    mode = mode or black.FileMode()
+    mode = mode or black.Mode()
     if path.suffix == ".pyi":
         mode = replace(mode, is_pyi=True)
 
@@ -176,7 +177,7 @@ def check_file(path: Path, *, mode: Optional["black.FileMode"] = None) -> FileRe
 
 def check_file_shim(
     # Unfortunately there's nothing like imap + starmap in multiprocessing.
-    arguments: Tuple[Path, Path, "black.FileMode"]
+    arguments: Tuple[Path, Path, "black.Mode"]
 ) -> Tuple[str, FileResult]:
     file, project_path, mode = arguments
     result = check_file(file, mode=mode)
@@ -185,7 +186,7 @@ def check_file_shim(
 
 
 def analyze_projects(
-    projects: List[Project],
+    projects: List[PreparedProject],
     work_dir: Path,
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
@@ -197,14 +198,12 @@ def analyze_projects(
     # For consistency w/ Windows so things don't unintentionally work only on Linux.
     multiprocessing.set_start_method("spawn")
 
-    # TODO: refactor this and related functions cuz it's a bit of a mess :)
-    files_and_modes = [get_files_and_mode(proj, work_dir / proj.name) for proj in projects]
-    file_count = sum(len(files) for files, _ in files_and_modes)
+    file_count = sum(len(files) for _, files, _ in projects)
     progress.update(task, total=file_count)
     bold = "[bold]" if verbose else ""
 
     def check_project_files(
-        files: List[Path], project_path: Path, *, mode: "black.FileMode"
+        files: List[Path], project_path: Path, *, mode: "black.Mode"
     ) -> ProjectResults:
         file_results = ProjectResults()
         data_packets = [(file_path, project_path, mode) for file_path in files]
@@ -218,13 +217,13 @@ def analyze_projects(
 
     with multiprocessing.Pool() as pool:
         results = {}
-        for project, (files, mode) in zip(projects, files_and_modes):
+        for project, files, mode in projects:
             project_task = progress.add_task(f"[bold]-> {project.name}", total=len(files))
             if verbose:
                 console.log(f"[bold]Checking {project.name} ({len(files)} files)")
             file_results = check_project_files(files, work_dir / project.name, mode=mode)
             results[project.name] = file_results
-            overall_result = get_overall_result(file_results)
+            overall_result = file_results.overall_result
             coloring = RESULT_COLORS[overall_result]
             console.log(f"{bold}{project.name} finished as [{coloring}]{overall_result}")
             progress.remove_task(project_task)

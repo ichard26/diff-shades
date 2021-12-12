@@ -73,7 +73,3 @@ PROJECTS: Final = [
 assert PROJECTS == sorted(PROJECTS, key=attrgetter("name")), "PROJECTS is not sorted"
 for p in PROJECTS:
     assert p.name == p.name.casefold(), f"project name '{p.name}' wasn't casefolded"
-    if p.custom_arguments is None:
-        p.custom_arguments = ["--experimental-string-processing"]
-    else:
-        p.custom_arguments.append("--experimental-string-processing")

@@ -58,6 +58,7 @@ def readable_int(number: int) -> str:
 def make_analysis_summary(analysis: Analysis) -> Panel:
     main_table = Table.grid()
     stats_table = Table.grid()
+
     file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
     file_table.add_column("Result")
     file_table.add_column("# of files")
@@ -73,6 +74,7 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
         project_table.add_row(type, str(count), style=type)
     stats_table.add_row(file_table, "   ", project_table)
     main_table.add_row(stats_table)
+
     additions, deletions = analysis.line_changes
     left_stats = f"""
         [bold]# of lines: {readable_int(analysis.line_count)}
@@ -80,15 +82,19 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
         # of projects: {len(analysis.projects)}\
     """
     right_stats = (
-        f"\n\n\n[green]{readable_int(additions)} additions[/]"
-        f" - [red]{readable_int(deletions)} deletions[/]"
-        f" [[bold]{readable_int(additions + deletions)} total]"
+        f"\n\n[bold]{readable_int(additions + deletions)} changes in total[/]"
+        f"\n[green]{readable_int(additions)} additions[/]"
+        f" - [red]{readable_int(deletions)} deletions"
     )
     stats_table_two = Table.grid(expand=True)
     stats_table_two.add_row(
         textwrap.dedent(left_stats), Text.from_markup(right_stats, justify="right")
     )
     main_table.add_row(stats_table_two)
+    extra_args = analysis.metadata.get("black-extra-args")
+    if extra_args:
+        pretty_args = Text(" ".join(extra_args), style="itatic", justify="center")
+        main_table.add_row(Panel(pretty_args, title="\[custom arguments]", border_style="dim"))
     created_at = datetime.fromisoformat(analysis.metadata["created-at"])
     subtitle = (
         f"[dim]black {analysis.metadata['black-version']} -"

@@ -6,12 +6,13 @@ import atexit
 import dataclasses
 import json
 import os
+import subprocess
 import sys
-from contextlib import nullcontext
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ContextManager, Optional, Set
+from typing import Iterator, Optional, Sequence, Set, Tuple
 
 if sys.version_info >= (3, 8):
     from typing import Final
@@ -29,7 +30,13 @@ from rich.theme import Theme
 
 import diff_shades
 import diff_shades.results
-from diff_shades.analysis import GIT_BIN, RESULT_COLORS, analyze_projects, setup_projects
+from diff_shades.analysis import (
+    GIT_BIN,
+    RESULT_COLORS,
+    analyze_projects,
+    run_cmd,
+    setup_projects,
+)
 from diff_shades.config import PROJECTS
 from diff_shades.output import (
     color_diff,
@@ -57,6 +64,16 @@ def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Ana
     return analysis
 
 
+@contextmanager
+def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
+    if use:
+        os.makedirs(use, exist_ok=True)
+        yield use
+    else:
+        with TemporaryDirectory(prefix="diff-shades-") as wd:
+            yield Path(wd)
+
+
 def diff_two_results(r1: FileResult, r2: FileResult, file: str) -> str:
     if "failed" in (r1.type, r2.type):
         first_dst = f"[{r1.error}: {r1.message}]\n" if r1.type == "failed" else "[no crash]\n"
@@ -66,6 +83,17 @@ def diff_two_results(r1: FileResult, r2: FileResult, file: str) -> str:
         second_dst = r2.dst if r2.type == "reformatted" else r2.src
 
     return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
+
+
+def check_black_args(args: Sequence[str]) -> None:
+    if "--fast" in args or "--safe" in args:
+        console.log("[warning]--fast/--safe is ignored, Black is always ran in safe mode.")
+    try:
+        run_cmd([sys.executable, "-m", "black", "-", *args], input="daylily")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[error]Invalid black arguments: {' '.join(args)}\n")
+        console.print(e.stdout.strip(), style="italic")
+        sys.exit(1)
 
 
 @click.group()
@@ -124,6 +152,7 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
 # fmt: off
 @main.command()
 @click.argument("results-path", metavar="results-filepath", type=WRITABLE_FILE)
+@click.argument("black-args", metavar="[-- black-args]", nargs=-1, type=click.UNPROCESSED)
 @click.option(
     "-s", "--select",
     multiple=True,
@@ -137,8 +166,8 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
     help="Exclude projects from running."
 )
 @click.option(
-    "-w", "--work-dir",
-    type=click.Path(exists=False, dir_okay=True, file_okay=False, resolve_path=True, path_type=Path),
+    "-w", "--work-dir", "cli_work_dir",
+    type=click.Path(dir_okay=True, file_okay=False, resolve_path=True, path_type=Path),
     help=(
         "Directory where project clones are used / stored. By default a"
         " temporary directory is used which will be cleaned up at exit."
@@ -162,9 +191,10 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
 # fmt: on
 def analyze(
     results_path: Path,
+    black_args: Tuple[str, ...],
     select: Set[str],
     exclude: Set[str],
-    work_dir: Optional[Path],
+    cli_work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
     verbose: bool,
 ) -> None:
@@ -189,6 +219,9 @@ def analyze(
         console.print("[info]-> Can't continue as I won't overwrite a directory.")
         sys.exit(1)
 
+    if black_args:
+        check_black_args(black_args)
+
     if repeat_projects_from:
         analysis = load_analysis(repeat_projects_from, msg="blueprint analysis")
         projects = list(analysis.projects.values())
@@ -204,30 +237,24 @@ def analyze(
             msg = f"[warning]Skipping {proj.name} as it requires python{proj.python_requires}"
             console.log(msg)
 
-    workdir_provider: ContextManager
-    if work_dir:
-        workdir_provider = nullcontext(work_dir)
-        os.makedirs(work_dir, exist_ok=True)
-    else:
-        workdir_provider = TemporaryDirectory(prefix="diff-shades-")
-    with workdir_provider as _work_dir:
-        work_dir = Path(_work_dir)
+    with get_work_dir(use=cli_work_dir) as work_dir:
         with make_rich_progress() as progress:
             title = "[bold cyan]Setting up projects"
             task1 = progress.add_task(title, total=len(projects))
-            projects = setup_projects(projects, work_dir, progress, task1, verbose)
+            prepared = setup_projects(projects, work_dir, black_args, progress, task1, verbose)
 
         with make_rich_progress() as progress:
             task2 = progress.add_task("[bold magenta]Running black")
-            results = analyze_projects(projects, work_dir, progress, task2, verbose)
+            results = analyze_projects(prepared, work_dir, progress, task2, verbose)
 
         metadata = {
             "black-version": black.__version__,
+            "black-extra-args": black_args,
             "created-at": datetime.now(timezone.utc).isoformat(),
             "data-format": 1,
         }
         analysis = Analysis(
-            projects={p.name: p for p in projects}, results=results, metadata=metadata
+            projects={p.name: p for p, _, _ in prepared}, results=results, metadata=metadata
         )
 
     with open(results_path, "w", encoding="utf-8") as f:
@@ -241,7 +268,7 @@ def analyze(
         # memory usage (and load times as memory is not infinitely fast). I've seen
         # peaks of 1GB max RSS with 100MB analyses which is just not OK.
         # See also: https://stackoverflow.com/a/58080893
-        json.dump(raw, f, separators=(",", ":"), indent=2, ensure_ascii=True)
+        json.dump(raw, f, indent=2, ensure_ascii=True)
         f.write("\n")
 
     console.line()
