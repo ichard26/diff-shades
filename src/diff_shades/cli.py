@@ -5,7 +5,6 @@
 import atexit
 import dataclasses
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -37,14 +36,20 @@ from diff_shades.analysis import (
     run_cmd,
     setup_projects,
 )
-from diff_shades.config import PROJECTS
+from diff_shades.config import PROJECTS, Project
 from diff_shades.output import (
     color_diff,
     make_analysis_summary,
     make_rich_progress,
     readable_int,
 )
-from diff_shades.results import Analysis, FileResult, filter_results, unified_diff
+from diff_shades.results import (
+    Analysis,
+    FileResult,
+    ProjectResults,
+    filter_results,
+    unified_diff,
+)
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
@@ -67,7 +72,7 @@ def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Ana
 @contextmanager
 def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
     if use:
-        os.makedirs(use, exist_ok=True)
+        use.mkdir(parents=True, exist_ok=True)
         yield use
     else:
         with TemporaryDirectory(prefix="diff-shades-") as wd:
@@ -83,6 +88,31 @@ def diff_two_results(r1: FileResult, r2: FileResult, file: str) -> str:
         second_dst = r2.dst if r2.type == "reformatted" else r2.src
 
     return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
+
+
+def compare_project_pair(
+    project: Project, results: ProjectResults, results2: ProjectResults
+) -> bool:
+    found_difference = False
+    header = f"{project.name} - {project.url}"
+    if "github" in project.url:
+        rev_link = project.url[:-4] + f"/tree/{project.commit}"
+        revision = f"-> [link={rev_link}]revision {project.commit}[/link]"
+    else:
+        revision = f"-> revision {project.commit}"
+
+    for file, r1 in results.items():
+        r2 = results2[file]
+        if r1 != r2:
+            if not found_difference:
+                console.print(f"[bold][reformatted]{header}[/][/]")
+                console.print(f"[reformatted]{revision}")
+                found_difference = True
+
+            diff = diff_two_results(r1, r2, file=f"{project.name}:{file}")
+            console.print(color_diff(diff), highlight=False)
+
+    return found_difference
 
 
 def check_black_args(args: Sequence[str]) -> None:
@@ -149,7 +179,7 @@ def main(
     rich.reconfigure(log_path=False, record=dump_html, color_system=color_mode, theme=theme)
     if clear_cache:
         shutil.rmtree(diff_shades.results.CACHE_DIR)
-    os.makedirs(diff_shades.results.CACHE_DIR, exist_ok=True)
+    diff_shades.results.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if dump_html:
         atexit.register(console.save_html, path=dump_html)
 
@@ -392,7 +422,7 @@ def compare(
     analysis_two = load_analysis(analysis_path2, msg="second analysis")
 
     if project_key is None:
-        names = set(list(analysis_one.projects) + list(analysis_two.projects))
+        names = {*analysis_one.projects, *analysis_two.projects}
     else:
         names = {project_key}
     shared_projects = []
@@ -402,7 +432,8 @@ def compare(
         elif analysis_one.projects[n] != analysis_two.projects[n]:
             console.log(f"[warning]Skipping {n} as it was configured differently.")
         else:
-            shared_projects.append((n, analysis_one.results[n], analysis_two.results[n]))
+            proj = analysis_one.projects[n]
+            shared_projects.append((proj, analysis_one.results[n], analysis_two.results[n]))
 
     console.line()
     if all(proj1 == proj2 for _, proj1, proj2 in shared_projects):
@@ -410,13 +441,9 @@ def compare(
         sys.exit(0)
 
     if diff_mode:
-        for proj, proj_results, proj_results2 in shared_projects:
-            for file, r1 in proj_results.items():
-                r2 = proj_results2[file]
-                if r1 != r2:
-                    diff = diff_two_results(r1, r2, file=f"{proj}:{file}")
-                    console.print(color_diff(diff), highlight=False)
-
+        for project, proj_results, proj_results2 in shared_projects:
+            if compare_project_pair(project, proj_results, proj_results2):
+                console.line()
     elif list_mode:
         console.print("[error]--list is not implemented yet")
         sys.exit(1)
