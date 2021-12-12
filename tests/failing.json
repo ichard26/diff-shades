@@ -1,0 +1,24 @@
+{
+  "projects": {
+    "daylily": {
+      "name": "daylily",
+      "url": "daylily://my-code.me",
+      "python_requires": null,
+      "custom_arguments": [],
+      "commit": "abcde"
+    }
+  },
+  "results": {
+    "daylily": {
+      "myfile": {
+        "type": "nothing-changed",
+        "src": "abcde"
+      }
+    }
+  },
+  "metadata": {
+    "created-at": "2021-12-11T03:06:10.913928+00:00",
+    "black-version": "21.12b0",
+    "data-format": 1
+  }
+}
