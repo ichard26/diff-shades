@@ -6,6 +6,7 @@ import atexit
 import dataclasses
 import json
 import os
+import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -24,7 +25,6 @@ import rich
 import rich.traceback
 from rich.markup import escape
 from rich.padding import Padding
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.theme import Theme
 
@@ -104,8 +104,11 @@ def check_black_args(args: Sequence[str]) -> None:
 @click.option(
     "--dump-html", type=WRITABLE_FILE, help="Save a HTML copy of the emitted output."
 )
+@click.option("--clear-cache", is_flag=True, help="Drop all cached analyses.")
 @click.version_option(version=diff_shades.__version__, prog_name="diff-shades")
-def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path]) -> None:
+def main(
+    no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path], clear_cache: bool
+) -> None:
     """
     The Black shade analyser and comparison tool.
 
@@ -121,13 +124,13 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
      - Simple but readable diffing capabilities
      - Repeatable analyses via --repeat-projects-from
      - Structured JSON output
-     - per-project python_requires support
+     - Per-project python_requires support
+     - Custom per-analysis formatting configuration
      - Oh and of course, pretty output!
 
     \b
     Potential tasks / additionals:
      - jupyter notebook support
-     - custom per-analysis formatting configuration
      - even more helpful output
      - better UX (particularly when things go wrong)
      - code cleanup as my code is messy as usual :p
@@ -144,6 +147,8 @@ def main(no_color: Optional[bool], show_locals: bool, dump_html: Optional[Path])
     })
     # fmt: on
     rich.reconfigure(log_path=False, record=dump_html, color_system=color_mode, theme=theme)
+    if clear_cache:
+        shutil.rmtree(diff_shades.results.CACHE_DIR)
     os.makedirs(diff_shades.results.CACHE_DIR, exist_ok=True)
     if dump_html:
         atexit.register(console.save_html, path=dump_html)
@@ -306,10 +311,10 @@ def show(
                 console.print(f"[bold]-> FYI the file's status is {result.type}")
                 sys.exit(1)
 
-            console.print(Syntax(getattr(result, field_key), "python"))
+            console.print(getattr(result, field_key), highlight=False, soft_wrap=True)
 
         elif result.type == "nothing-changed":
-            console.print("[bold nothing-changed]Nothing-changed.")
+            console.print("[bold][nothing-changed]Nothing-changed.")
         elif result.type == "failed":
             console.print(f"[error]{escape(result.error)}")
             console.print(f"[info]-> {escape(result.message)}")
@@ -427,6 +432,7 @@ def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
     Show and check for failed files in an analysis.
     """
     analysis = load_analysis(analysis_path)
+    console.line()
 
     if key and key not in analysis.projects:
         console.print(f"[error]The project '{key}' couldn't be found.")
