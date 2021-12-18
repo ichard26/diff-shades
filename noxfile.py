@@ -1,4 +1,6 @@
+import sys
 from pathlib import Path
+from typing import Optional
 
 import nox
 
@@ -10,11 +12,32 @@ nox.needs_version = ">=2021.10.1"
 nox.options.error_on_external_run = True
 
 
+def get_option(session: nox.Session, name: str) -> Optional[str]:
+    assert name.startswith("--")
+    if name in session.posargs:
+        index = session.posargs.index(name)
+        try:
+            value = session.posargs[index + 1]
+        except IndexError:
+            session.warn(f"[WARN] missing argument to {name}")
+        else:
+            del session.posargs[index : index + 1]
+            assert isinstance(value, str)
+            return value
+
+    return None
+
+
 @nox.session(name="smoke-tests", python=SUPPORTED_PYTHONS)
 def smoke_tests(session: nox.Session) -> None:
     session.install(".")
     session.run("diff-shades", "--version")
-    session.install("black")
+    black_req = get_option(session, "--black-req")
+    if black_req:
+        session.install(black_req)
+    else:
+        session.install("black")
+
     tmp = Path(session.create_tmp())
     target = str(tmp / "fake-devnull")
     cache = str(tmp / "cache")
@@ -23,7 +46,9 @@ def smoke_tests(session: nox.Session) -> None:
     log = str(tmp / "log.html")
     short_file = "src/diff_shades/__init__.py"
 
-    base = ["diff-shades", "--force-color"]
+    base = ["diff-shades"]
+    if "--force-color" in sys.argv:
+        base.append("--force-color")
     session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache)
     session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache, "--", "-l", "100")
     session.run(*base, "analyze", target, "-s", "diff-shades", "-s", "ptr", "-w", cache)

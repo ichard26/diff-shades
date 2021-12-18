@@ -238,8 +238,8 @@ clear the cache with the `--clear-cache` flag (before the command!).
 If you're using diff-shades in CI, `--dump-html` might come in handy saving a
 copy of all emitted output. Unfortunately it behaves poorly with progress bars
 so don't use this w/ `analyze`. Additionally, `--no-color` and `--force-color`
-exist to override rich's terminal and color support detection (say for GHA
-where colors are supported but rich doesn't know that).
+exist to override rich's color support detection (say for GHA where colors are
+supported but rich doesn't know that).
 
 ## Contributing
 

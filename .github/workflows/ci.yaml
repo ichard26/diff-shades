@@ -26,6 +26,8 @@ jobs:
     name: tests / ${{ matrix.python }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}-latest
     needs: [pre-commit]
+    env:
+      PYTHONIOENCODING: utf-8
 
     strategy:
       fail-fast: true
@@ -51,5 +53,10 @@ jobs:
           python -m pip install pip wheel --upgrade
           python -m pip install nox
 
-      - name: Run nox smoke-tests session
+      - name: Run nox smoke-tests session (latest PyPI black)
         run: nox --force-color --verbose -s smoke-tests-${{ matrix.python }}
+
+      - name: Run nox smoke-tests session (main black)
+        run: >
+          nox --force-color --verbose -s smoke-tests-${{ matrix.python }} --reuse-existing-virtualenvs
+          -- --black-req git+https://github.com/psf/black.git
