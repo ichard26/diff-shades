@@ -218,7 +218,7 @@ def analyze_projects(
     with multiprocessing.Pool() as pool:
         results = {}
         for project, files, mode in projects:
-            project_task = progress.add_task(f"[bold]-> {project.name}", total=len(files))
+            project_task = progress.add_task(f"[bold]╰─> {project.name}", total=len(files))
             if verbose:
                 console.log(f"[bold]Checking {project.name} ({len(files)} files)")
             file_results = check_project_files(files, work_dir / project.name, mode=mode)

@@ -24,7 +24,6 @@ import rich
 import rich.traceback
 from rich.markup import escape
 from rich.padding import Padding
-from rich.table import Table
 from rich.theme import Theme
 
 import diff_shades
@@ -40,16 +39,11 @@ from diff_shades.config import PROJECTS, Project
 from diff_shades.output import (
     color_diff,
     make_analysis_summary,
+    make_comparison_summary,
+    make_project_details_table,
     make_rich_progress,
-    readable_int,
 )
-from diff_shades.results import (
-    Analysis,
-    FileResult,
-    ProjectResults,
-    filter_results,
-    unified_diff,
-)
+from diff_shades.results import Analysis, ProjectResults, diff_two_results, filter_results
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
@@ -79,27 +73,16 @@ def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
             yield Path(wd)
 
 
-def diff_two_results(r1: FileResult, r2: FileResult, file: str) -> str:
-    if "failed" in (r1.type, r2.type):
-        first_dst = f"[{r1.error}: {r1.message}]\n" if r1.type == "failed" else "[no crash]\n"
-        second_dst = f"[{r2.error}: {r2.message}]\n" if r2.type == "failed" else "[no crash]\n"
-    else:
-        first_dst = r1.dst if r1.type == "reformatted" else r1.src
-        second_dst = r2.dst if r2.type == "reformatted" else r2.src
-
-    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
-
-
 def compare_project_pair(
     project: Project, results: ProjectResults, results2: ProjectResults
 ) -> bool:
     found_difference = False
-    header = f"{project.name} - {project.url}"
+    header = f"\[{project.name} - {project.url}]"
     if "github" in project.url:
         rev_link = project.url[:-4] + f"/tree/{project.commit}"
-        revision = f"-> [link={rev_link}]revision {project.commit}[/link]"
+        revision = f"╰─> [link={rev_link}]revision {project.commit}[/link]"
     else:
-        revision = f"-> revision {project.commit}"
+        revision = f"╰─> revision {project.commit}"
 
     for file, r1 in results.items():
         r2 = results2[file]
@@ -109,7 +92,7 @@ def compare_project_pair(
                 console.print(f"[reformatted]{revision}")
                 found_difference = True
 
-            diff = diff_two_results(r1, r2, file=f"{project.name}:{file}")
+            diff = diff_two_results(r1, r2, file=f"{project.name}:{file}", diff_failure=True)
             console.print(color_diff(diff), highlight=False)
 
     return found_difference
@@ -239,19 +222,19 @@ def analyze(
         import black
     except ImportError as err:
         console.print(f"[error]Couldn't import black: {err}")
-        console.print("[info]-> This command requires an installation of Black.")
+        console.print("[info]╰─> This command requires an installation of Black.")
         sys.exit(1)
 
     if GIT_BIN is None:
         console.print("[error]Couldn't find a Git executable.")
-        console.print("[info]-> This command requires git sadly enough.")
+        console.print("[info]╰─> This command requires git sadly enough.")
         sys.exit(1)
 
     if results_path.exists() and results_path.is_file():
         console.log(f"[warning]Overwriting {results_path} as it already exists!")
     elif results_path.exists() and results_path.is_dir():
         console.print(f"[error]{results_path} is a pre-existing directory.")
-        console.print("[info]-> Can't continue as I won't overwrite a directory.")
+        console.print("[info]╰─> Can't continue as I won't overwrite a directory.")
         sys.exit(1)
 
     if black_args:
@@ -364,36 +347,8 @@ def show(
     else:
         panel = make_analysis_summary(analysis)
         console.print(panel)
-
         console.line()
-        project_table = Table(show_edge=False, box=rich.box.SIMPLE)
-        project_table.add_column("Name")
-        project_table.add_column("Results (n/r/f)")
-        project_table.add_column("Line changes (total +/-)")
-        project_table.add_column("# files")
-        project_table.add_column("# lines")
-        for proj, proj_results in analysis.results.items():
-            results = ""
-            for type in ("nothing-changed", "reformatted", "failed"):
-                count = len(filter_results(proj_results, type))
-                results += f"[{type}]{count}[/]/"
-            results = results[:-1]
-
-            additions, deletions = proj_results.line_changes
-            if additions or deletions:
-                line_changes = (
-                    f"{readable_int(additions + deletions)}"
-                    f" [[green]{readable_int(additions)}[/]"
-                    f"/[red]{readable_int(deletions)}[/]]"
-                )
-            else:
-                line_changes = "n/a"
-            file_count = str(len(proj_results))
-            line_count = readable_int(proj_results.line_count)
-            color = proj_results.overall_result
-            project_table.add_row(
-                proj, results, line_changes, file_count, line_count, style=color
-            )
+        project_table = make_project_details_table(analysis)
         console.print(project_table)
 
 
@@ -440,6 +395,9 @@ def compare(
         console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
 
+    panel = make_comparison_summary((p1, p2) for _, p1, p2 in shared_projects)
+    console.print(panel)
+    console.line()
     if diff_mode:
         for project, proj_results, proj_results2 in shared_projects:
             if compare_project_pair(project, proj_results, proj_results2):

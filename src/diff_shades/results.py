@@ -47,6 +47,18 @@ def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
     return "".join(diff_lines)
 
 
+def calculate_line_changes(diff: str) -> Tuple[int, int]:
+    additions = 0
+    deletions = 0
+    for line in diff.splitlines():
+        if line[0] == "+" and not line.startswith("+++"):
+            additions += 1
+        elif line[0] == "-" and not line.startswith("---"):
+            deletions += 1
+
+    return additions, deletions
+
+
 class _FileResultBase:
     def __init__(self) -> None:
         self.src: str
@@ -80,14 +92,8 @@ class ReformattedResult(_FileResultBase):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.line_changes == (-1, -1):
-            additions = 0
-            deletions = 0
-            for line in self.diff(":daylily:").splitlines():
-                if line[0] == "+" and not line.startswith("+++"):
-                    additions += 1
-                elif line[0] == "-" and not line.startswith("---"):
-                    deletions += 1
-            object.__setattr__(self, "line_changes", (additions, deletions))
+            changes = calculate_line_changes(self.diff("throw-away-name"))
+            object.__setattr__(self, "line_changes", changes)
 
     @lru_cache(maxsize=None)
     def diff(self, filepath: str) -> str:
@@ -154,6 +160,22 @@ class Analysis:
         additions = sum(p.line_changes[0] for p in self)
         deletions = sum(p.line_changes[1] for p in self)
         return (additions, deletions)
+
+
+def diff_two_results(
+    r1: FileResult, r2: FileResult, file: str, diff_failure: bool = False
+) -> str:
+    if "failed" in (r1.type, r2.type):
+        if not diff_failure:
+            raise ValueError("Cannot diff failing file results.")
+
+        first_dst = f"[{r1.error}: {r1.message}]\n" if r1.type == "failed" else "[no crash]\n"
+        second_dst = f"[{r2.error}: {r2.message}]\n" if r2.type == "failed" else "[no crash]\n"
+    else:
+        first_dst = r1.dst if r1.type == "reformatted" else r1.src
+        second_dst = r2.dst if r2.type == "reformatted" else r2.src
+
+    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
 
 
 # fmt: off

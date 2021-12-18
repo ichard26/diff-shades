@@ -133,6 +133,10 @@ ichard26@acer-ubuntu:~/programming/tools/diff-shades$ diff-shades compare analys
 [18:45:08] Loaded first analysis: /home/ichard26/programming/tools/diff-shades/analysis.json
            Loaded second analysis: /home/ichard26/programming/tools/diff-shades/analysis-2.json
 
+╭────────────────────── Summary ──────────────────────╮
+│ 7 projects & 25 files changed / 30 changes [+0/-30] │
+╰─────────────────────────────────────────────────────╯
+
 Differences found.
 ```
 

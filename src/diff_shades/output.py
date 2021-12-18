@@ -5,7 +5,7 @@
 import textwrap
 from collections import Counter
 from datetime import datetime
-from typing import cast
+from typing import Iterable, Tuple, cast
 
 import rich
 from rich.markup import escape
@@ -14,7 +14,14 @@ from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
-from diff_shades.results import Analysis, ResultTypes, filter_results
+from diff_shades.results import (
+    Analysis,
+    ProjectResults,
+    ResultTypes,
+    calculate_line_changes,
+    diff_two_results,
+    filter_results,
+)
 
 console = rich.get_console()
 
@@ -102,3 +109,60 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     )
 
     return Panel(main_table, title="[bold]Summary", subtitle=subtitle, expand=False)
+
+
+def make_comparison_summary(
+    project_pairs: Iterable[Tuple[ProjectResults, ProjectResults]]
+) -> Panel:
+    differing_projects = 0
+    differing_files = 0
+    additions = 0
+    deletions = 0
+    for results_one, results_two in project_pairs:
+        if results_one != results_two:
+            differing_projects += 1
+            for file, r1 in results_one.items():
+                r2 = results_two[file]
+                if r1 != r2:
+                    differing_files += 1
+                    if "failed" not in (r1.type, r2.type):
+                        diff = diff_two_results(r1, r2, "throwaway")
+                        changes = calculate_line_changes(diff)
+                        additions += changes[0]
+                        deletions += changes[1]
+
+    line = f"{differing_projects} projects & {differing_files} files changed /"
+    line += f" {readable_int(additions + deletions)} changes"
+    line += f" [[green]+{readable_int(additions)}[/]/[red]-{readable_int(deletions)}[/]]"
+    return Panel(line, title="[bold]Summary", expand=False)
+
+
+def make_project_details_table(analysis: Analysis) -> Table:
+    project_table = Table(show_edge=False, box=rich.box.SIMPLE)
+    project_table.add_column("Name")
+    project_table.add_column("Results (n/r/f)")
+    project_table.add_column("Line changes (total +/-)")
+    project_table.add_column("# files")
+    project_table.add_column("# lines")
+    for proj, proj_results in analysis.results.items():
+        results = ""
+        for type in ("nothing-changed", "reformatted", "failed"):
+            count = len(filter_results(proj_results, type))
+            results += f"[{type}]{count}[/]/"
+        results = results[:-1]
+
+        additions, deletions = proj_results.line_changes
+        if additions or deletions:
+            line_changes = (
+                f"{readable_int(additions + deletions)}"
+                f" [[green]{readable_int(additions)}[/]"
+                f"/[red]{readable_int(deletions)}[/]]"
+            )
+        else:
+            line_changes = "n/a"
+        file_count = str(len(proj_results))
+        line_count = readable_int(proj_results.line_count)
+        color = proj_results.overall_result
+        project_table.add_row(proj, results, line_changes, file_count, line_count, style=color)
+
+    return project_table
