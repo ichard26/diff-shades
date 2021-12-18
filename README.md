@@ -54,7 +54,6 @@ Commands:
   compare      Compare two analyses for differences in the results.
   show         Show results or metadata from an analysis.
   show-failed  Show and check for failed files in an analysis.
-
 ```
 
 ### Running an analysis
