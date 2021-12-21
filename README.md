@@ -267,5 +267,18 @@ Black-primer eventually spawned the creation of [mypy-primer], a black-primer
 equivalent for mypy. Many features present in diff-shades come from
 black-primer and mypy-primer.
 
+______________________________________________________________________
+
+## Changelog
+
+### 21.12a5
+
+- When running on GitHub Actions, `--force-colors` and the width will be
+  forcefully set for you.
+
+### 21.12a4
+
+First public release, enjoy the alpha quality software :)
+
 [black-primer]: https://github.com/psf/black/tree/main/src/black_primer
 [mypy-primer]: https://github.com/hauntsaninja/mypy_primer/

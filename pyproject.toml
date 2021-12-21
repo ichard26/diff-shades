@@ -38,7 +38,7 @@ dynamic = ["version", "description"]
 diff-shades = "diff_shades.cli:main"
 
 [project.urls]
-Home = "https://github.com/ichard26/diff-shades"
+Repository = "https://github.com/ichard26/diff-shades"
 
 [tool.flit.module]
 name = "diff_shades"

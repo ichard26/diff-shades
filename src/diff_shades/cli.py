@@ -152,9 +152,12 @@ def main(
     rich.traceback.install(suppress=[click], show_locals=show_locals)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
     color_mode = color_mode_key[no_color]
+    width: Optional[int] = None
     if os.getenv("GITHUB_ACTIONS") == "true":
         # Force colors when running on GitHub Actions.
         color_mode = "truecolor"
+        # Annoyingly enough rich autodetects the width to be far too small on GHA.
+        width = 115
     # fmt: off
     theme = Theme({
         "error": "bold red",
@@ -163,7 +166,9 @@ def main(
         **RESULT_COLORS
     })
     # fmt: on
-    rich.reconfigure(log_path=False, record=dump_html, color_system=color_mode, theme=theme)
+    rich.reconfigure(
+        log_path=False, record=dump_html, color_system=color_mode, theme=theme, width=width
+    )
     if clear_cache:
         shutil.rmtree(diff_shades.results.CACHE_DIR)
     diff_shades.results.CACHE_DIR.mkdir(parents=True, exist_ok=True)
