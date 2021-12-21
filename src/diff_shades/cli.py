@@ -5,6 +5,7 @@
 import atexit
 import dataclasses
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -151,6 +152,9 @@ def main(
     rich.traceback.install(suppress=[click], show_locals=show_locals)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
     color_mode = color_mode_key[no_color]
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        # Force colors when running on GitHub Actions.
+        color_mode = "truecolor"
     # fmt: off
     theme = Theme({
         "error": "bold red",
