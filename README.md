@@ -267,9 +267,13 @@ Black-primer eventually spawned the creation of [mypy-primer], a black-primer
 equivalent for mypy. Many features present in diff-shades come from
 black-primer and mypy-primer.
 
-______________________________________________________________________
-
 ## Changelog
+
+### 21.12a6
+
+- Don't forcefully set `--force-colors` if `--no-colors` was passed on GHA.
+- Add `--quiet` to the compare command to suppress the unnecessary log
+  messages.
 
 ### 21.12a5
 

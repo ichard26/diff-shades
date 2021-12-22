@@ -154,8 +154,9 @@ def main(
     color_mode = color_mode_key[no_color]
     width: Optional[int] = None
     if os.getenv("GITHUB_ACTIONS") == "true":
-        # Force colors when running on GitHub Actions.
-        color_mode = "truecolor"
+        # Force colors when running on GitHub Actions (unless --no-color is passed).
+        if no_color is not True:
+            color_mode = "truecolor"
         # Annoyingly enough rich autodetects the width to be far too small on GHA.
         width = 115
     # fmt: off
@@ -368,6 +369,7 @@ def show(
 @click.option("--check", is_flag=True, help="Return 1 if differences were found.")
 @click.option("--diff", "diff_mode", is_flag=True, help="Show a diff of the differences.")
 @click.option("--list", "list_mode", is_flag=True, help="List the differing files.")
+@click.option("-q", "--quiet", is_flag=True, help="Suppress log messages.")
 def compare(
     analysis_path1: Path,
     analysis_path2: Path,
@@ -375,6 +377,7 @@ def compare(
     project_key: Optional[str],
     diff_mode: bool,
     list_mode: bool,
+    quiet: bool,
 ) -> None:
     """Compare two analyses for differences in the results."""
 
@@ -382,8 +385,8 @@ def compare(
         console.print("[error]--diff and --list can't be used at the same time.")
         sys.exit(1)
 
-    analysis_one = load_analysis(analysis_path1, msg="first analysis")
-    analysis_two = load_analysis(analysis_path2, msg="second analysis")
+    analysis_one = load_analysis(analysis_path1, msg="first analysis", quiet=quiet)
+    analysis_two = load_analysis(analysis_path2, msg="second analysis", quiet=quiet)
 
     if project_key is None:
         names = {*analysis_one.projects, *analysis_two.projects}
