@@ -1,5 +1,5 @@
 """
-The Black shade analyser and comparison tool.
+The Black shade analyser and comparison tool
 """
 
 __author__ = "Richard Si, et al."
