@@ -82,6 +82,12 @@ def smoke_tests(session: nox.Session) -> None:
     session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache)
     session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache, "--", "-l", "100")
     session.run(*base, "analyze", target, "-s", "diff-shades", "-s", "ptr", "-w", cache)
+    # fmt: off
+    session.run(
+        *base, "analyze", target, "-s", "diff-shades", "-s", "ptr",
+        "-w", cache, "--show-project-revision",
+    )
+    # fmt: on
     session.run(*base, "show", target)
     session.run(*base, "show", target, "diff-shades", "noxfile.py")
     session.run(*base, "show", target, "diff-shades", short_file, "src")

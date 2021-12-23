@@ -216,6 +216,11 @@ def main(
     is_flag=True,
     help="Be more verbose."
 )
+@click.option(
+    "--show-project-revision",
+    is_flag=True,
+    help="A less noisy alternative to --verbose."
+)
 # fmt: on
 def analyze(
     results_path: Path,
@@ -225,6 +230,7 @@ def analyze(
     cli_work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
     verbose: bool,
+    show_project_revision: bool,
 ) -> None:
     """Run Black against 'millions' of LOC and save the results."""
 
@@ -269,7 +275,14 @@ def analyze(
         with make_rich_progress() as progress:
             title = "[bold cyan]Setting up projects"
             task1 = progress.add_task(title, total=len(projects))
-            prepared = setup_projects(projects, work_dir, black_args, progress, task1, verbose)
+            prepared = setup_projects(
+                projects,
+                work_dir,
+                black_args,
+                progress,
+                task1,
+                verbose or show_project_revision,
+            )
 
         with make_rich_progress() as progress:
             task2 = progress.add_task("[bold magenta]Running black")

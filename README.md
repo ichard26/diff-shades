@@ -114,7 +114,8 @@ file discovery options! Those will have an impact and are highly discouraged
 since they'll be applied to all selected projects.
 
 For very detailed logs on what exactly diff-shades is doing `--verbose` has you
-covered.
+covered. `--show-project-revision` is a much less noisy alternative to
+`--verbose` which only shows the revisions of the projects to be analyzed.
 
 ### Comparing analyses
 
@@ -319,10 +320,12 @@ black-primer and mypy-primer.
 
 ## Changelog
 
-### *Unreleased*
+### 21.12a7
 
 - Also show how many lines, files, and projects were analyzed in the comparison
   summary.
+- Add `--show-project-revision` as a less noisy alternative to `--verbose`
+  which ONLY shows the project revisions (and not the result of each file).
 
 ### 21.12a6
 
