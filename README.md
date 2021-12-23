@@ -126,6 +126,12 @@ ichard26@acer-ubuntu:~/programming/tools/diff-shades$ diff-shades compare same.j
 [18:43:00] Loaded first analysis: /home/ichard26/programming/tools/diff-shades/same.json
 [18:43:03] Loaded second analysis: /home/ichard26/programming/tools/diff-shades/same.json
 
+╭────────────────────── Summary ───────────────────────╮
+│ 0 projects & 0 files changed / 0 changes [+0/-0]     │
+│                                                      │
+│ ... out of 2 020 758 lines, 9650 files & 23 projects │
+╰──────────────────────────────────────────────────────╯
+
 Nothing-changed.
 
 ichard26@acer-ubuntu:~/programming/tools/diff-shades$ diff-shades compare analysis.json analysis-2.json
