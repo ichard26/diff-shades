@@ -63,7 +63,7 @@ PROJECTS: Final = [
     Project("pyanalyze", "https://github.com/quora/pyanalyze.git"),
     Project("pyramid", "https://github.com/Pylons/pyramid.git"),
     Project("pytest", "https://github.com/pytest-dev/pytest.git"),
-    Project("scikit-lego", "https://github.com/koaning/scikit-lego"),
+    Project("scikit-lego", "https://github.com/koaning/scikit-lego.git"),
     Project("sqlalchemy", "https://github.com/sqlalchemy/sqlalchemy.git"),
     Project("tox", "https://github.com/tox-dev/tox.git"),
     Project("typeshed", "https://github.com/python/typeshed.git"),
