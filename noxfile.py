@@ -1,15 +1,37 @@
+import shutil
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import nox
 
 THIS_DIR = Path(__file__).parent
 TESTS_DIR = THIS_DIR / "tests"
+WINDOWS = sys.platform.startswith("win")
 SUPPORTED_PYTHONS = ["3.7", "3.8", "3.9", "3.10"]
+
 
 nox.needs_version = ">=2021.10.1"
 nox.options.error_on_external_run = True
+
+
+def wipe(session: nox.Session, path: Union[str, Path]) -> None:
+    if "--install-only" in sys.argv:
+        return
+
+    if isinstance(path, str):
+        path = Path.cwd() / path
+    normalized = path.relative_to(Path.cwd())
+
+    if not path.exists():
+        return
+
+    if path.is_file():
+        session.log(f"Deleting `{normalized}` file.")
+        path.unlink()
+    elif path.is_dir():
+        session.log(f"Deleting `{normalized}` directory.")
+        shutil.rmtree(path)
 
 
 def get_option(session: nox.Session, name: str) -> Optional[str]:
@@ -28,8 +50,16 @@ def get_option(session: nox.Session, name: str) -> Optional[str]:
     return None
 
 
+@nox.session(name="lint")
+def lint(session: nox.Session) -> None:
+    """Run pre-commit."""
+    session.install("pre-commit")
+    session.run("pre-commit", "run", "--all-files", "--show-diff-on-failure")
+
+
 @nox.session(name="smoke-tests", python=SUPPORTED_PYTHONS)
 def smoke_tests(session: nox.Session) -> None:
+    """Trying to make sure diff-shades isn't fundamentally broken."""
     session.install(".")
     session.run("diff-shades", "--version")
     black_req = get_option(session, "--black-req")
@@ -61,3 +91,15 @@ def smoke_tests(session: nox.Session) -> None:
     session.run(*base, "compare", target, target, "--check")
     session.run(*base, "compare", failing, failing_two, "--diff")
     session.run(*base, "show-failed", target, "--check")
+
+
+@nox.session(name="setup-env", venv_backend="none")
+def setup_env(session: nox.Session) -> None:
+    """Setup a basic (virtual) environment for manual testing."""
+    env_dir = THIS_DIR / ".venv"
+    bin_dir = env_dir / ("Scripts" if WINDOWS else "bin")
+    wipe(session, env_dir)
+    session.run(sys.executable, "-m", "virtualenv", str(env_dir))
+    session.run(bin_dir / "python", "-m", "pip", "install", "-e", ".")
+    session.run(bin_dir / "python", "-m", "pip", "install", "black")
+    session.log("Virtual environment at project root under '.venv' ready to go!")
