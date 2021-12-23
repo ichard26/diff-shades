@@ -403,13 +403,13 @@ def compare(
             shared_projects.append((proj, analysis_one.results[n], analysis_two.results[n]))
 
     console.line()
+    panel = make_comparison_summary([(p1, p2) for _, p1, p2 in shared_projects])
+    console.print(panel)
+    console.line()
     if all(proj1 == proj2 for _, proj1, proj2 in shared_projects):
         console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
 
-    panel = make_comparison_summary((p1, p2) for _, p1, p2 in shared_projects)
-    console.print(panel)
-    console.line()
     if diff_mode:
         for project, proj_results, proj_results2 in shared_projects:
             if compare_project_pair(project, proj_results, proj_results2):
