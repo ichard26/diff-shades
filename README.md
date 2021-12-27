@@ -1,6 +1,6 @@
-# diff-shades
+<h1 align="center"><img src="./diff-shades-logo.png" alt="diff-shades logo"></h1>
 
-The Black shade analyser and comparison tool.
+**The Black shade analyser and comparison tool.**
 
 AKA Richard's personal take at a better black-primer (by stealing ideas from
 mypy-primer) :p
