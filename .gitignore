@@ -65,4 +65,7 @@ dmypy.json
 
 # Editor configuration / junk
 .vscode/
-.*.swp  # thanks vim >.<
+**/*.swp
+
+# Probably diff-shades analyses
+*.json

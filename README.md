@@ -280,6 +280,14 @@ black-primer and mypy-primer.
 
 ## Changelog
 
+### 21.12a8 (unreleased)
+
+- Log files produced when a file fails to format are now recorded and can be
+  pulled via the `show` or `show-failed` commands.
+- `--show-locals` is also forcefully set on GHA.
+
+**Oh and there's now a logo for diff-shades! woo!**
+
 ### 21.12a7
 
 - Also show how many lines, files, and projects were analyzed in the comparison

@@ -162,7 +162,6 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
     """
     import black
 
-    # TODO: record log files if available
     mode = mode or black.FileMode()
     if path.suffix == ".pyi":
         mode = replace(mode, is_pyi=True)
@@ -172,12 +171,21 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
         with suppress_output():
             dst = black.format_file_contents(src, fast=False, mode=mode)
     except black.NothingChanged:
-        return NothingChangedResult(src=src)
+        return NothingChangedResult(src)
 
     except Exception as err:
-        return FailedResult(src=src, error=err.__class__.__name__, message=str(err))
+        msg = str(err)
+        log = None
+        # If this error contains a log file, let's record it!
+        if "helpful: " in msg:
+            _, file_path = msg.split("helpful: ")
+            logpath = Path(file_path)
+            if logpath.name.startswith("blk") and logpath.suffix == ".log":
+                log = logpath.read_text("utf-8")
 
-    return ReformattedResult(src=src, dst=dst)
+        return FailedResult(src, err.__class__.__name__, msg, log=log)
+
+    return ReformattedResult(src, dst)
 
 
 def check_file_shim(arguments: Tuple[Path, Path, "black.Mode"]) -> Tuple[str, FileResult]:

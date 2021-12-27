@@ -11,7 +11,18 @@ import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping, Sequence, Tuple, Type, Union, overload
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    overload,
+)
 from zipfile import ZipFile
 
 if sys.version_info >= (3, 8):
@@ -107,6 +118,7 @@ class FailedResult(_FileResultBase):
     src: str
     error: str
     message: str
+    log: Optional[str] = None
     line_count: int = -1
 
     @property

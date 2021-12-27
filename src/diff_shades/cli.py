@@ -153,6 +153,9 @@ def main(
      - better UX (particularly when things go wrong)
      - code cleanup as my code is messy as usual :p
     """
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        # Makes it easier to debug failures on CI.
+        show_locals = True
     rich.traceback.install(suppress=[click], show_locals=show_locals)
     color_mode_key = {True: None, None: "auto", False: "truecolor"}
     color_mode = color_mode_key[no_color]
@@ -163,14 +166,9 @@ def main(
             color_mode = "truecolor"
         # Annoyingly enough rich autodetects the width to be far too small on GHA.
         width = 115
-    # fmt: off
-    theme = Theme({
-        "error": "bold red",
-        "warning": "bold yellow",
-        "info": "bold",
-        **RESULT_COLORS
-    })
-    # fmt: on
+    theme = Theme(
+        {"error": "bold red", "warning": "bold yellow", "info": "bold", **RESULT_COLORS}
+    )
     rich.reconfigure(
         log_path=False, record=dump_html, color_system=color_mode, theme=theme, width=width
     )
@@ -296,7 +294,7 @@ def analyze(
             "black-version": black.__version__,
             "black-extra-args": black_args,
             "created-at": datetime.now(timezone.utc).isoformat(),
-            "data-format": 1,
+            "data-format": 1.1,
         }
         analysis = Analysis(
             projects={p.name: p for p, _, _ in prepared}, results=results, metadata=metadata
@@ -309,7 +307,7 @@ def analyze(
         # implementations) guarantees that string index operations will be roughly
         # constant time which flies right in the face of the efficient UTF-8 format.
         # Hence why str instances transparently switch between Latin-1 and other
-        # constant-size formats. In the worst case a UCS-4 is used exploding
+        # constant-size formats. In the worst case UCS-4 is used exploding
         # memory usage (and load times as memory is not infinitely fast). I've seen
         # peaks of 1GB max RSS with 100MB analyses which is just not OK.
         # See also: https://stackoverflow.com/a/58080893
@@ -360,7 +358,10 @@ def show(
             console.print("[bold][nothing-changed]Nothing-changed.")
         elif result.type == "failed":
             console.print(f"[error]{escape(result.error)}")
-            console.print(f"[info]-> {escape(result.message)}")
+            console.print(f"╰─> {escape(result.message)}", highlight=False)
+            if result.log is not None:
+                console.line()
+                console.print(escape(result.log), highlight=False)
         elif result.type == "reformatted":
             diff = result.diff(file_key)
             console.print(color_diff(diff), highlight=False)
@@ -443,8 +444,9 @@ def compare(
 @main.command("show-failed")
 @click.argument("analysis-path", metavar="analysis", type=READABLE_FILE)
 @click.argument("key", metavar="project", callback=normalize_input, required=False)
+@click.option("--show-log", is_flag=True, help="Show log files if present as well.")
 @click.option("--check", is_flag=True, help="Return 1 if there's a failure.")
-def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
+def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: bool) -> None:
     """
     Show and check for failed files in an analysis.
     """
@@ -462,13 +464,16 @@ def show_failed(analysis_path: Path, key: Optional[str], check: bool) -> None:
             continue
 
         failed = filter_results(proj_results, "failed")
+        failed_files += len(failed)
+        failed_projects += int(bool(failed))
         if failed:
             console.print(f"[bold red]{proj_name}:", highlight=False)
             for number, (file, result) in enumerate(failed.items(), start=1):
                 s = f"{number}. {file}: {escape(result.error)} - {escape(result.message)}"
                 console.print(Padding(s, (0, 0, 0, 2)), highlight=False)
-                failed_files += 1
-            failed_projects += 1
+                if result.log is not None and show_log:
+                    padded = Padding(escape(result.log), (0, 0, 0, 4))
+                    console.print(padded, highlight=False)
             console.line()
 
     console.print(f"[bold]# of failed files: {failed_files}")
