@@ -48,6 +48,7 @@ def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
 
 
 def calculate_line_changes(diff: str) -> Tuple[int, int]:
+    """Return a two-tuple (additions, deletions) of a diff."""
     additions = 0
     deletions = 0
     for line in diff.splitlines():
@@ -165,6 +166,11 @@ class Analysis:
 def diff_two_results(
     r1: FileResult, r2: FileResult, file: str, diff_failure: bool = False
 ) -> str:
+    """Compare two results for the same file producing a diff.
+
+    Setting `diff_failure` to True allows failing results to be compared
+    in a diff-like format. The diff can be empty if there's no difference.
+    """
     if "failed" in (r1.type, r2.type):
         if not diff_failure:
             raise ValueError("Cannot diff failing file results.")
@@ -207,15 +213,26 @@ def filter_results(results: NamedResults, type: str) -> NamedResults:
 
 
 def get_overall_result(results: Union[NamedResults, Sequence[FileResult]]) -> ResultTypes:
+    """Summarize a group of file results as one result type.
+
+    The group is considered X result under the following conditions:
+
+    failed: there's at least one failing result
+    reformatted: there's at least one reformatted result
+    nothing-changed: ALL results are nothing-changed
+
+    If the group meets the requirement for failed and reformatted, failed
+    wins out.
+    """
     results = list(results.values()) if isinstance(results, Mapping) else results
-    results_by_type = [r.type for r in results]
-    if "failed" in results_by_type:
+    result_types = {r.type for r in results}
+    if "failed" in result_types:
         return "failed"
 
-    if "reformatted" in results_by_type:
+    if "reformatted" in result_types:
         return "reformatted"
 
-    assert [r.type == "nothing-changed" for r in results]
+    assert result_types == {"nothing-changed"}
     return "nothing-changed"
 
 
@@ -231,6 +248,14 @@ def clear_cache(*, ensure_room: bool = False) -> None:
     for entry, atime in by_oldest:
         if time.time() - atime > CACHE_LAST_ACCESS_CUTOFF:
             entry.unlink()
+
+
+def calculate_cache_key(filepath: Path) -> str:
+    filepath = filepath.resolve()
+    stat = filepath.stat()
+    cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"
+    hasher = hashlib.blake2b(cache_key.encode("utf-8"), digest_size=15)
+    return hasher.hexdigest()
 
 
 def load_analysis_contents(data: JSON) -> Analysis:
@@ -249,7 +274,7 @@ def load_analysis_contents(data: JSON) -> Analysis:
     projects = {name: Project(**config) for name, config in data["projects"].items()}
     metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
     data_format = metadata.get("data-format", None)
-    if data_format != 1:
+    if 1 > data_format > 2:
         raise ValueError(f"unsupported analysis format: {data_format}")
 
     results = {}
@@ -262,13 +287,18 @@ def load_analysis_contents(data: JSON) -> Analysis:
 
 
 def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
-    filepath = filepath.resolve()
-    stat = filepath.stat()
-    cache_key = f"{filepath};{stat.st_mtime};{stat.st_size};{diff_shades.__version__}"
-    hasher = hashlib.blake2b(cache_key.encode("utf-8"), digest_size=15)
-    short_key = hasher.hexdigest()
+    """Load an analysis from `filepath` potentially using a cached copy.
 
-    cache_path = Path(CACHE_DIR, f"{short_key}.pickle")
+    Upon loading an analysis a cached copy will be written to disk for
+    future use. If a cached analysis fails to load it'll be deleted and
+    the original will loaded instead.
+
+    If the filepath ends with the .zip extension, it'll be auto-extracted
+    with the contained analysis cached (erroring out if there's more than
+    one member).
+    """
+    cache_key = calculate_cache_key(filepath)
+    cache_path = Path(CACHE_DIR, f"{cache_key}.pickle")
     if cache_path.exists():
         try:
             analysis = pickle.loads(cache_path.read_bytes())

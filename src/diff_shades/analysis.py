@@ -53,9 +53,9 @@ def clone_repo(url: str, *, to: Path, sha: Optional[str] = None) -> None:
     if sha:
         if not to.exists():
             to.mkdir()
-        run_cmd(["git", "init"], cwd=to)
-        run_cmd(["git", "fetch", url, sha], cwd=to)
-        run_cmd(["git", "checkout", sha], cwd=to)
+        run_cmd([GIT_BIN, "init"], cwd=to)
+        run_cmd([GIT_BIN, "fetch", url, sha], cwd=to)
+        run_cmd([GIT_BIN, "checkout", sha], cwd=to)
     else:
         run_cmd([GIT_BIN, "clone", url, "--depth", "1", str(to)])
 
@@ -120,6 +120,8 @@ def suppress_output() -> Iterator:
 
     with open(os.devnull, "w", encoding="utf-8") as blackhole:
         with redirect_stdout(blackhole), redirect_stderr(blackhole):
+            # It shouldn't be necessary to also patch click.echo but I've
+            # received reports of the stream redirections not working :shrug:
             with patch("click.echo", new=lambda *args, **kwargs: None):
                 yield
 
@@ -155,10 +157,13 @@ def get_files_and_mode(
 
 
 def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult:
+    """
+    Format file at `path` and return the result.
+    """
     import black
 
     # TODO: record log files if available
-    mode = mode or black.Mode()
+    mode = mode or black.FileMode()
     if path.suffix == ".pyi":
         mode = replace(mode, is_pyi=True)
 
@@ -175,10 +180,8 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
     return ReformattedResult(src=src, dst=dst)
 
 
-def check_file_shim(
+def check_file_shim(arguments: Tuple[Path, Path, "black.Mode"]) -> Tuple[str, FileResult]:
     # Unfortunately there's nothing like imap + starmap in multiprocessing.
-    arguments: Tuple[Path, Path, "black.Mode"]
-) -> Tuple[str, FileResult]:
     file, project_path, mode = arguments
     result = check_file(file, mode=mode)
     normalized_path = file.relative_to(project_path).as_posix()
@@ -203,9 +206,9 @@ def analyze_projects(
     bold = "[bold]" if verbose else ""
 
     def check_project_files(
-        files: List[Path], project_path: Path, *, mode: "black.Mode"
+        files: List[Path], project_path: Path, mode: "black.Mode"
     ) -> ProjectResults:
-        file_results = ProjectResults()
+        file_results = {}
         data_packets = [(file_path, project_path, mode) for file_path in files]
         for (filepath, result) in pool.imap(check_file_shim, data_packets):
             if verbose:
@@ -213,7 +216,7 @@ def analyze_projects(
             file_results[filepath] = result
             progress.advance(task)
             progress.advance(project_task)
-        return file_results
+        return ProjectResults(file_results)
 
     with multiprocessing.Pool() as pool:
         results = {}
@@ -221,11 +224,9 @@ def analyze_projects(
             project_task = progress.add_task(f"[bold]╰─> {project.name}", total=len(files))
             if verbose:
                 console.log(f"[bold]Checking {project.name} ({len(files)} files)")
-            file_results = check_project_files(files, work_dir / project.name, mode=mode)
-            results[project.name] = file_results
-            overall_result = file_results.overall_result
-            coloring = RESULT_COLORS[overall_result]
-            console.log(f"{bold}{project.name} finished as [{coloring}]{overall_result}")
+            results[project.name] = check_project_files(files, work_dir / project.name, mode)
+            overall_result = results[project.name].overall_result
+            console.log(f"{bold}{project.name} finished as [{overall_result}]{overall_result}")
             progress.remove_task(project_task)
 
     return results

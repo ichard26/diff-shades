@@ -114,40 +114,35 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
 def make_comparison_summary(
     project_pairs: Sequence[Tuple[ProjectResults, ProjectResults]],
 ) -> Panel:
-    # TODO: clean this up by reusing Analysis objects.
-    lines = 0
-    files = 0
+    # NOTE: This code assumes both project results used the same project revision.
+    lines = sum(p.line_count for p, _ in project_pairs)
+    files = sum(len(p) for p, _ in project_pairs)
     differing_projects = 0
     differing_files = 0
     additions = 0
     deletions = 0
     for results_one, results_two in project_pairs:
-        any_failed = False
-        for file, r1 in results_one.items():
-            files += 1
-            lines += r1.line_count
-            r2 = results_two[file]
-            if r1 != r2:
-                any_failed = True
-                differing_files += 1
-                if "failed" not in (r1.type, r2.type):
-                    diff = diff_two_results(r1, r2, "throwaway")
-                    changes = calculate_line_changes(diff)
-                    additions += changes[0]
-                    deletions += changes[1]
-        differing_projects += int(any_failed)
+        if results_one != results_two:
+            differing_projects += 1
+            for file, r1 in results_one.items():
+                r2 = results_two[file]
+                if r1 != r2:
+                    differing_files += 1
+                    if "failed" not in (r1.type, r2.type):
+                        diff = diff_two_results(r1, r2, "throwaway")
+                        changes = calculate_line_changes(diff)
+                        additions += changes[0]
+                        deletions += changes[1]
 
-    def fmt_num(number: int) -> str:
+    def fmt(number: int) -> str:
         return "[cyan]" + readable_int(number) + "[/cyan]"
 
-    line = (
-        f"{fmt_num(differing_projects)} projects & {fmt_num(differing_files)} files changed /"
-    )
-    line += f" {fmt_num(additions + deletions)} changes"
-    line += f" [[green]+{readable_int(additions)}[/]/[red]-{readable_int(deletions)}[/]]\n\n"
-    line += f"... out of {fmt_num(lines)} lines"
-    line += f", {fmt_num(files)} files"
-    line += f" & {fmt_num(len(project_pairs))} projects"
+    line = fmt(differing_projects) + " projects & " + fmt(differing_files) + " files changed /"
+    line += f" {fmt(additions + deletions)} changes"
+    line += f" [[green]+{readable_int(additions)}[/]/[red]-{readable_int(deletions)}[/]]"
+    line += f"\n\n... out of {fmt(lines)} lines"
+    line += f", {fmt(files)} files"
+    line += f" & {fmt(len(project_pairs))} projects"
     return Panel(line, title="[bold]Summary", expand=False)
 
 

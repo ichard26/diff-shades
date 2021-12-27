@@ -66,6 +66,9 @@ def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Ana
 
 @contextmanager
 def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
+    """Returns `uses` (after making sure it exists) falling back to a
+    TemporaryDirectory if it's None.
+    """
     if use:
         use.mkdir(parents=True, exist_ok=True)
         yield use
@@ -100,6 +103,7 @@ def compare_project_pair(
 
 
 def check_black_args(args: Sequence[str]) -> None:
+    """Assert `args` are valid (and also warn on questionable arguments)."""
     if "--fast" in args or "--safe" in args:
         console.log("[warning]--fast/--safe is ignored, Black is always ran in safe mode.")
     try:

@@ -39,13 +39,14 @@ diff-shades = "diff_shades.cli:main"
 
 [project.urls]
 Repository = "https://github.com/ichard26/diff-shades"
+Changelog = "https://github.com/ichard26/diff-shades#readme"
 
 [tool.flit.module]
 name = "diff_shades"
 
 [tool.black]
 line-length = 95
-target-version = ["py37", "py38", "py39"]
+target-version = ["py37", "py38", "py39", "py310"]
 
 [tool.isort]
 profile = "black"
