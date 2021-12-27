@@ -134,8 +134,8 @@ def get_files_and_mode(
     # configuration code. I also get to keep the pretty output since I can
     # directly invoke black.format_file_contents :D
     #
-    # This pulls in a ton of stuff including the heavy asyncio. Let's avoid the import cost
-    # unless till the last possible moment.
+    # This pulls in a ton of stuff including the heavy asyncio. Let's avoid the
+    # import cost unless till the last possible moment.
     from unittest.mock import patch
 
     import black
@@ -143,16 +143,24 @@ def get_files_and_mode(
     files: List[Path] = []
     mode = None
 
-    def shim(sources: List[Path], *args: Any, **kwargs: Any) -> None:
+    def many_shim(sources: List[Path], *args: Any, **kwargs: Any) -> None:
         nonlocal files, mode
         files.extend(sources)
         mode = kwargs["mode"]
 
-    with suppress_output(), patch("black.reformat_many", new=shim):
+    def single_shim(src: Path, *args: Any, **kwargs: Any) -> None:
+        nonlocal files, mode
+        files = [src]
+        mode = kwargs["mode"]
+
+    # I really should implement better context manager handling in black ...
+    with suppress_output(), patch("black.reformat_many", new=many_shim), patch(
+        "black.reformat_one", new=single_shim
+    ):
         cmd = [str(path), *project.custom_arguments, *extra_args, "--check"]
         black.main(cmd, standalone_mode=False)
 
-    assert files and isinstance(mode, black.Mode)
+    assert files and isinstance(mode, black.Mode), (files, mode)
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 
