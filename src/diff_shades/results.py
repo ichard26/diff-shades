@@ -193,7 +193,7 @@ def diff_two_results(
         first_dst = r1.dst if r1.type == "reformatted" else r1.src
         second_dst = r2.dst if r2.type == "reformatted" else r2.src
 
-    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}").rstrip()
+    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
 
 
 # fmt: off

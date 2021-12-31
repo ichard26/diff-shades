@@ -68,4 +68,4 @@ dmypy.json
 **/*.swp
 
 # Probably diff-shades analyses
-*.json
+/*.json

@@ -234,7 +234,11 @@ def analyze_projects(
             progress.advance(project_task)
         return ProjectResults(file_results)
 
-    with multiprocessing.Pool() as pool:
+    # Sadly the Pool context manager API doesn't play nice with pytest-cov so
+    # we have to use this uglier alternative ...
+    # https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html#if-you-use-multiprocessing-pool
+    pool = multiprocessing.Pool()
+    try:
         results = {}
         for project, files, mode in projects:
             project_task = progress.add_task(f"[bold]╰─> {project.name}", total=len(files))
@@ -244,5 +248,8 @@ def analyze_projects(
             overall_result = results[project.name].overall_result
             console.log(f"{bold}{project.name} finished as [{overall_result}]{overall_result}")
             progress.remove_task(project_task)
+    finally:
+        pool.close()
+        pool.join()
 
     return results

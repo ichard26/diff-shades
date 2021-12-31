@@ -34,6 +34,15 @@ def wipe(session: nox.Session, path: Union[str, Path]) -> None:
         shutil.rmtree(path)
 
 
+def get_flag(session: nox.Session, flag: str) -> bool:
+    if flag in session.posargs:
+        index = session.posargs.index(flag)
+        del session.posargs[index]
+        return True
+
+    return False
+
+
 def get_option(session: nox.Session, name: str) -> Optional[str]:
     assert name.startswith("--")
     if name in session.posargs:
@@ -57,6 +66,25 @@ def lint(session: nox.Session) -> None:
     session.run("pre-commit", "run", "--all-files", "--show-diff-on-failure")
 
 
+@nox.session(name="tests", python=SUPPORTED_PYTHONS)
+def tests(session: nox.Session) -> None:
+    """A proper unit and functional test suite."""
+    session.install("-e", ".[test]")
+    session.run("diff-shades", "--version")
+    black_req = get_option(session, "--black-req")
+    if black_req:
+        session.install(black_req)
+    else:
+        session.install("black")
+
+    coverage = not get_flag(session, "--no-cov")
+    cmd = ["pytest", "tests"]
+    if coverage:
+        session.run("coverage", "erase")
+        cmd.extend(["--cov", "--cov-context", "test"])
+    session.run(*cmd, *session.posargs)
+
+
 @nox.session(name="smoke-tests", python=SUPPORTED_PYTHONS)
 def smoke_tests(session: nox.Session) -> None:
     """Trying to make sure diff-shades isn't fundamentally broken."""
@@ -71,8 +99,8 @@ def smoke_tests(session: nox.Session) -> None:
     tmp = Path(session.create_tmp())
     target = str(tmp / "fake-devnull")
     cache = str(tmp / "cache")
-    failing = str(TESTS_DIR / "failing.json")
-    failing_two = str(TESTS_DIR / "failing-2.json")
+    failing = str(TESTS_DIR / "data" / "failing.json")
+    failing_two = str(TESTS_DIR / "data" / "failing-2.json")
     log = str(tmp / "log.html")
     short_file = "src/diff_shades/__init__.py"
 

@@ -66,7 +66,7 @@ def load_analysis(path: Path, msg: str = "analysis", quiet: bool = False) -> Ana
 
 @contextmanager
 def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
-    """Returns `uses` (after making sure it exists) falling back to a
+    """Returns `use` (after making sure it exists) falling back to a
     TemporaryDirectory if it's None.
     """
     if use:
