@@ -234,10 +234,10 @@ Asserting that the analysis is failure-free is incredibly simple with
 
 ### Appendix: tips!
 
-diff-shades supports reading analyses stored as ZIP files as uncompressed
-analysis files frequently hit the 100MB+ milestone. No special handing is
-required, just pass a file with a `.zip` extension and diff-shades will
-auto-extract it!
+diff-shades supports reading and writing analyses stored as ZIP files as
+uncompressed analysis files frequently hit the 100MB+ milestone. No special
+handing is required, just pass a filepath with a `.zip` extension and
+diff-shades will auto-extract / auto-zip it!
 
 diff-shades also caches analysis file reads (saving the loaded objects as
 pickles) to further improve responsiveness and overall performance. At most
@@ -280,11 +280,13 @@ black-primer and mypy-primer.
 
 ## Changelog
 
-### 21.12a8 (unreleased)
+### (unreleased)
 
 - Log files produced when a file fails to format are now recorded and can be
   pulled via the `show` or `show-failed` commands.
 - `--show-locals` is also forcefully set on GHA.
+- Analyses can now be automatically zipped at save time by using the .zip file
+  extension.
 
 **Oh and there's now a logo for diff-shades! woo!**
 

@@ -8,7 +8,7 @@ import json
 import pickle
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import (
@@ -23,7 +23,7 @@ from typing import (
     Union,
     overload,
 )
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile
 
 if sys.version_info >= (3, 8):
     from typing import Final, Literal
@@ -286,7 +286,7 @@ def load_analysis_contents(data: JSON) -> Analysis:
     projects = {name: Project(**config) for name, config in data["projects"].items()}
     metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}
     data_format = metadata.get("data-format", None)
-    if 1 > data_format > 2:
+    if not (1 <= data_format < 2):
         raise ValueError(f"unsupported analysis format: {data_format}")
 
     results = {}
@@ -319,7 +319,7 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
         else:
             return analysis, True
 
-    if filepath.name.endswith(".zip"):
+    if filepath.suffix == ".zip":
         with ZipFile(filepath) as zfile:
             entries = zfile.infolist()
             if len(entries) > 1:
@@ -337,3 +337,23 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
     clear_cache(ensure_room=True)
     cache_path.write_bytes(pickle.dumps(analysis, protocol=4))
     return analysis, False
+
+
+def save_analysis(filepath: Path, analysis: Analysis) -> None:
+    raw = asdict(analysis)
+    # Escaping non-ASCII characters in the JSON blob is very important to keep
+    # memory usage and load times managable. CPython (not sure about other
+    # implementations) guarantees that string index operations will be roughly
+    # constant time which flies right in the face of the efficient UTF-8 format.
+    # Hence why str instances transparently switch between Latin-1 and other
+    # constant-size formats. In the worst case UCS-4 is used exploding
+    # memory usage (and load times as memory is not infinitely fast). I've seen
+    # peaks of 1GB max RSS with 100MB analyses which is just not OK.
+    # See also: https://stackoverflow.com/a/58080893
+    blob = json.dumps(raw, indent=2, ensure_ascii=True) + "\n"
+
+    if filepath.suffix == ".zip":
+        with ZipFile(filepath, mode="w", compression=ZIP_DEFLATED) as zfile:
+            zfile.writestr("analysis.json", blob)
+    else:
+        filepath.write_text(blob, encoding="utf-8")

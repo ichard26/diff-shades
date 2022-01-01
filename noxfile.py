@@ -27,10 +27,10 @@ def wipe(session: nox.Session, path: Union[str, Path]) -> None:
         return
 
     if path.is_file():
-        session.log(f"Deleting `{normalized}` file.")
+        session.log(f"Deleting '{normalized}' file.")
         path.unlink()
     elif path.is_dir():
-        session.log(f"Deleting `{normalized}` directory.")
+        session.log(f"Deleting '{normalized}' directory.")
         shutil.rmtree(path)
 
 
@@ -80,9 +80,11 @@ def tests(session: nox.Session) -> None:
     coverage = not get_flag(session, "--no-cov")
     cmd = ["pytest", "tests"]
     if coverage:
-        session.run("coverage", "erase")
+        wipe(session, "htmlcov")
         cmd.extend(["--cov", "--cov-context", "test"])
     session.run(*cmd, *session.posargs)
+    if coverage:
+        session.run("coverage", "html")
 
 
 @nox.session(name="smoke-tests", python=SUPPORTED_PYTHONS)

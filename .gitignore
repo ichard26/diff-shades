@@ -69,3 +69,4 @@ dmypy.json
 
 # Probably diff-shades analyses
 /*.json
+/*.zip

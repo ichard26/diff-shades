@@ -3,8 +3,6 @@
 # ============================
 
 import atexit
-import dataclasses
-import json
 import os
 import shutil
 import subprocess
@@ -44,7 +42,13 @@ from diff_shades.output import (
     make_project_details_table,
     make_rich_progress,
 )
-from diff_shades.results import Analysis, ProjectResults, diff_two_results, filter_results
+from diff_shades.results import (
+    Analysis,
+    ProjectResults,
+    diff_two_results,
+    filter_results,
+    save_analysis,
+)
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
@@ -300,20 +304,7 @@ def analyze(
             projects={p.name: p for p, _, _ in prepared}, results=results, metadata=metadata
         )
 
-    with open(results_path, "w", encoding="utf-8") as f:
-        raw = dataclasses.asdict(analysis)
-        # Escaping non-ASCII characters in the JSON blob is very important to keep
-        # memory usage and load times managable. CPython (not sure about other
-        # implementations) guarantees that string index operations will be roughly
-        # constant time which flies right in the face of the efficient UTF-8 format.
-        # Hence why str instances transparently switch between Latin-1 and other
-        # constant-size formats. In the worst case UCS-4 is used exploding
-        # memory usage (and load times as memory is not infinitely fast). I've seen
-        # peaks of 1GB max RSS with 100MB analyses which is just not OK.
-        # See also: https://stackoverflow.com/a/58080893
-        json.dump(raw, f, indent=2, ensure_ascii=True)
-        f.write("\n")
-
+    save_analysis(results_path, analysis)
     console.line()
     panel = make_analysis_summary(analysis)
     console.print(panel)

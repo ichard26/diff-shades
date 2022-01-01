@@ -1,0 +1,23 @@
+{
+  "projects": {
+    "test": {
+      "name": "test",
+      "url": "https://example.com",
+      "custom_arguments": [],
+      "python_requires": null,
+      "commit": null
+    }
+  },
+  "results": {
+    "test": {
+      "a.py": {
+        "type": "nothing-changed",
+        "src": "content\n",
+        "line_count": 1
+      }
+    }
+  },
+  "metadata": {
+    "data-format": 1.1
+  }
+}

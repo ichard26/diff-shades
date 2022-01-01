@@ -5,7 +5,9 @@ import textwrap
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
+from unittest.mock import patch
+from zipfile import ZipFile
 
 if sys.version_info >= (3, 8):
     from typing import Final
@@ -21,11 +23,15 @@ import diff_shades.results
 from diff_shades.analysis import check_file
 from diff_shades.config import Project
 from diff_shades.results import (
+    Analysis,
     FailedResult,
     FileResult,
     NothingChangedResult,
+    ProjectResults,
     ReformattedResult,
     filter_results,
+    load_analysis,
+    save_analysis,
 )
 
 THIS_DIR: Final = Path(__file__).parent
@@ -67,11 +73,7 @@ class TestAnalysis:
 
     def test_clone_repo(self, tmp_path: Path) -> None:
         target = Path(tmp_path, "diff-shades")
-        diff_shades.analysis.clone_repo(DIFF_SHADES_GIT_URL, to=target)
         # NOTE: I know test inter-dependance is bad but deal with it
-        sha, msg = diff_shades.analysis.get_commit(target)
-        assert sha and msg
-        shutil.rmtree(target)
         diff_shades.analysis.clone_repo(
             DIFF_SHADES_GIT_URL, to=target, sha="7a89fde30be692e21ffc70b0e8fbade59e322319"
         )
@@ -131,6 +133,13 @@ class TestConfig:
 
 
 class TestResults:
+    def get_basic_analysis(self) -> Tuple[Analysis, Path]:
+        projects = {"test": Project("test", "https://example.com")}
+        results = {"test": ProjectResults({"a.py": NothingChangedResult("content\n")})}
+        metadata = {"data-format": 1.1}
+        analysis = Analysis(projects=projects, results=results, metadata=metadata)
+        return analysis, DATA_DIR / "basic.analysis.json"
+
     def test_calculate_line_changes(self) -> None:
         diff = """\
         --- a/src/diff_shades/config.py
@@ -225,6 +234,48 @@ class TestResults:
         r = get_overall_result({"1.py": reformatted, "2.py": reformatted, "3.py": failed})
         assert r == "failed", "failed should win over reformatted"
 
+    def test_load_analysis(self, tmp_path: Path) -> None:
+        analysis, filepath = self.get_basic_analysis()
+        with patch("diff_shades.results.CACHE_DIR", new=tmp_path):
+            loaded_analysis, cached = load_analysis(filepath)
+            assert not cached, "hmm, test interference?"
+            assert analysis == loaded_analysis
+
+            with pytest.raises(ValueError, match="unsupported analysis format"):
+                analysis, _ = load_analysis(DATA_DIR / "invalid-data-format.analysis.json")
+
+    def test_load_analysis_caching(self, tmp_path: Path) -> None:
+        _, filepath = self.get_basic_analysis()
+        with patch("diff_shades.results.CACHE_DIR", new=tmp_path):
+            analysis, cached = load_analysis(filepath)
+            assert not cached
+            cached_analysis, cached = load_analysis(filepath)
+            assert analysis == cached_analysis and cached
+
+            shutil.rmtree(tmp_path)
+            tmp_path.mkdir()
+            for i in range(10):
+                Path(tmp_path, f"idk-{i}").write_text("throwaway", "utf-8")
+            load_analysis(filepath)
+            entries = len(list(tmp_path.iterdir()))
+            assert entries == 5
+
+    def test_load_analysis_with_zip(self, tmp_path: Path) -> None:
+        with patch("diff_shades.results.CACHE_DIR", new=tmp_path):
+            analysis, _ = load_analysis(DATA_DIR / "diff-shades-default.analysis.json")
+            analysis2, _ = load_analysis(DATA_DIR / "diff-shades-default.analysis.zip")
+            assert analysis == analysis2
+
+            with pytest.raises(ValueError, match="more than one member"):
+                load_analysis(DATA_DIR / "too-many-members.analysis.zip")
+
+    def test_save_analysis_with_zip(self, tmp_path: Path) -> None:
+        analysis, known_good_path = self.get_basic_analysis()
+        save_analysis(tmp_path / "analysis.zip", analysis)
+        with ZipFile(tmp_path / "analysis.zip") as zfile:
+            with zfile.open("analysis.json") as f:
+                assert f.read().decode("utf-8") == known_good_path.read_text("utf-8")
+
     def test_unified_diff(self) -> None:
         # fmt: off
         a = textwrap.dedent("""\
@@ -258,8 +309,12 @@ class TestResults:
              aaaa
             -bbbb
             -cccc
-            \ No newline at end of file
+            \\ No newline at end of file
             +BBBB
             +cccc
         """)
         # fmt: on
+
+
+def test_run_as_package() -> None:
+    run_cmd([sys.executable, "-m", "diff_shades", "--version"])
