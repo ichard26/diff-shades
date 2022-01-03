@@ -215,7 +215,7 @@ def analyze_projects(
     import multiprocessing
 
     # For consistency w/ Windows so things don't unintentionally work only on Linux.
-    multiprocessing.set_start_method("spawn")
+    mp = multiprocessing.get_context("spawn")
 
     file_count = sum(len(files) for _, files, _ in projects)
     progress.update(task, total=file_count)
@@ -237,7 +237,7 @@ def analyze_projects(
     # Sadly the Pool context manager API doesn't play nice with pytest-cov so
     # we have to use this uglier alternative ...
     # https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html#if-you-use-multiprocessing-pool
-    pool = multiprocessing.Pool()
+    pool = mp.Pool()
     try:
         results = {}
         for project, files, mode in projects:

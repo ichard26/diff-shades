@@ -6,6 +6,13 @@
       "python_requires": null,
       "custom_arguments": [],
       "commit": "abcde"
+    },
+    "irisa": {
+      "name": "irisa",
+      "url": "irisa://my-code.me",
+      "python_requires": null,
+      "custom_arguments": [],
+      "commit": "abcde"
     }
   },
   "results": {
@@ -14,7 +21,26 @@
         "type": "failed",
         "src": "abcde",
         "error": "AssertionError",
-        "message": "i feel like crashing today"
+        "message": "i feel like crashing today",
+        "log": "structlog"
+      },
+      "mysecondfile": {
+        "type": "reformatted",
+        "src": "abcde",
+        "dst": "ABCDE"
+      },
+      "mythirdfile": {
+        "type": "nothing-changed",
+        "src": "abcde"
+      }
+    },
+    "irisa": {
+      "my-other-file": {
+        "type": "failed",
+        "src": "abcde",
+        "error": "SystemError",
+        "message": "i'm tired.",
+        "log": "structlog"
       }
     }
   },

@@ -6,7 +6,6 @@ from typing import Optional, Union
 import nox
 
 THIS_DIR = Path(__file__).parent
-TESTS_DIR = THIS_DIR / "tests"
 WINDOWS = sys.platform.startswith("win")
 SUPPORTED_PYTHONS = ["3.7", "3.8", "3.9", "3.10"]
 
@@ -85,48 +84,9 @@ def tests(session: nox.Session) -> None:
     session.run(*cmd, *session.posargs)
     if coverage:
         session.run("coverage", "html")
-
-
-@nox.session(name="smoke-tests", python=SUPPORTED_PYTHONS)
-def smoke_tests(session: nox.Session) -> None:
-    """Trying to make sure diff-shades isn't fundamentally broken."""
-    session.install(".")
-    session.run("diff-shades", "--version")
-    black_req = get_option(session, "--black-req")
-    if black_req:
-        session.install(black_req)
-    else:
-        session.install("black")
-
-    tmp = Path(session.create_tmp())
-    target = str(tmp / "fake-devnull")
-    cache = str(tmp / "cache")
-    failing = str(TESTS_DIR / "data" / "failing.json")
-    failing_two = str(TESTS_DIR / "data" / "failing-2.json")
-    log = str(tmp / "log.html")
-    short_file = "src/diff_shades/__init__.py"
-
-    base = ["diff-shades"]
-    if "--force-color" in sys.argv:
-        base.append("--force-color")
-    session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache)
-    session.run(*base, "analyze", target, "-s", "diff-shades", "-w", cache, "--", "-l", "100")
-    session.run(*base, "analyze", target, "-s", "diff-shades", "-s", "ptr", "-w", cache)
-    # fmt: off
-    session.run(
-        *base, "analyze", target, "-s", "diff-shades", "-s", "ptr",
-        "-w", cache, "--show-project-revision",
-    )
-    # fmt: on
-    session.run(*base, "show", target)
-    session.run(*base, "show", target, "diff-shades", "noxfile.py")
-    session.run(*base, "show", target, "diff-shades", short_file, "src")
-    session.run(
-        *base, "--dump-html", log, "show", target, "diff-shades", short_file, "src", "-q"
-    )
-    session.run(*base, "compare", target, target, "--check")
-    session.run(*base, "compare", failing, failing_two, "--diff")
-    session.run(*base, "show-failed", target, "--check")
+        for c in THIS_DIR.glob(".coverage.*"):
+            if not c.read_bytes():
+                wipe(session, c)
 
 
 @nox.session(name="setup-env", venv_backend="none")
@@ -136,6 +96,6 @@ def setup_env(session: nox.Session) -> None:
     bin_dir = env_dir / ("Scripts" if WINDOWS else "bin")
     wipe(session, env_dir)
     session.run(sys.executable, "-m", "virtualenv", str(env_dir))
-    session.run(bin_dir / "python", "-m", "pip", "install", "-e", ".")
-    session.run(bin_dir / "python", "-m", "pip", "install", "black")
+    session.run(str(bin_dir / "python"), "-m", "pip", "install", "-e", ".")
+    session.run(str(bin_dir / "python"), "-m", "pip", "install", "black")
     session.log("Virtual environment at project root under '.venv' ready to go!")

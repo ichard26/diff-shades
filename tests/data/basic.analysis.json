@@ -18,6 +18,9 @@
     }
   },
   "metadata": {
+    "black-version": "21.12b0",
+    "black-extra-args": [],
+    "created-at": "2022-01-03T20:40:08.703857+00:00",
     "data-format": 1.1
   }
 }

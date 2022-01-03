@@ -1,3 +1,7 @@
+# TODO: assert output once diff-shades has a better std/out/err story
+# TODO: test compare with analyses that don't share the same set of projects
+# TODO: test the full matrix of supported data formats
+
 import shutil
 import subprocess
 import sys
@@ -5,7 +9,7 @@ import textwrap
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, Sequence, Tuple, Union
 from unittest.mock import patch
 from zipfile import ZipFile
 
@@ -16,9 +20,11 @@ else:
 
 import black
 import click
+import click.testing
 import pytest
 
 import diff_shades.analysis
+import diff_shades.cli
 import diff_shades.results
 from diff_shades.analysis import check_file
 from diff_shades.config import Project
@@ -45,6 +51,7 @@ run_cmd: Final = partial(
     stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT,
 )
+SupportedArgs = Sequence[Union[str, int, float, Path]]
 
 assert GIT_BIN, "running tests requires a discoverable Git binary"
 
@@ -52,6 +59,58 @@ assert GIT_BIN, "running tests requires a discoverable Git binary"
 def read_data(name: str) -> str:
     path = Path(DATA_DIR, name)
     return path.read_text(encoding="utf-8")
+
+
+class CLIResult:
+    def __init__(self, result: click.testing.Result, cmd: Sequence[str]) -> None:
+        self.result = result
+        self.cmd = cmd
+        self.return_code = result.exit_code
+        self.stdout = result.stdout if result.stdout_bytes is not None else None
+        self.stderr = result.stderr if result.stderr_bytes is not None else None
+
+    def assert_return_code(self, code: int) -> None:
+        if code != self.return_code:
+            msg = f"expected {code} return code, instead got {self.return_code}"
+            msg += f"\n command: {' '.join(self.cmd)}"
+            if self.stdout:
+                name = "output" if self.stderr is None else "stdout"
+                msg += f"\n {name}:\n" + textwrap.indent(self.stdout, " " * 3)
+            if self.stderr:
+                msg += "\n stderr:\n" + textwrap.indent(self.stderr, " " * 3)
+            raise RuntimeError(msg)
+
+
+class CLIRunner:
+    def run(self, args: SupportedArgs, **kwargs: Any) -> CLIResult:
+        sargs = [str(a) for a in args]
+        runner = click.testing.CliRunner(charset="utf-8", **kwargs)
+        r = runner.invoke(diff_shades.cli.main, sargs, catch_exceptions=False)
+        return CLIResult(r, cmd=sargs)
+
+    def check(self, args: SupportedArgs, **kwargs: Any) -> CLIResult:
+        sargs = [str(a) for a in args]
+        result = self.run(sargs, **kwargs)
+        result.assert_return_code(0)
+        return result
+
+
+@pytest.fixture
+def runner() -> CLIRunner:
+    return CLIRunner()
+
+
+def get_basic_analysis() -> Tuple[Analysis, Path]:
+    projects = {"test": Project("test", "https://example.com")}
+    results = {"test": ProjectResults({"a.py": NothingChangedResult("content\n")})}
+    metadata = {
+        "black-version": "21.12b0",
+        "black-extra-args": [],
+        "created-at": "2022-01-03T20:40:08.703857+00:00",
+        "data-format": 1.1,
+    }
+    analysis = Analysis(projects=projects, results=results, metadata=metadata)
+    return analysis, DATA_DIR / "basic.analysis.json"
 
 
 class TestAnalysis:
@@ -133,13 +192,6 @@ class TestConfig:
 
 
 class TestResults:
-    def get_basic_analysis(self) -> Tuple[Analysis, Path]:
-        projects = {"test": Project("test", "https://example.com")}
-        results = {"test": ProjectResults({"a.py": NothingChangedResult("content\n")})}
-        metadata = {"data-format": 1.1}
-        analysis = Analysis(projects=projects, results=results, metadata=metadata)
-        return analysis, DATA_DIR / "basic.analysis.json"
-
     def test_calculate_line_changes(self) -> None:
         diff = """\
         --- a/src/diff_shades/config.py
@@ -235,7 +287,7 @@ class TestResults:
         assert r == "failed", "failed should win over reformatted"
 
     def test_load_analysis(self, tmp_path: Path) -> None:
-        analysis, filepath = self.get_basic_analysis()
+        analysis, filepath = get_basic_analysis()
         with patch("diff_shades.results.CACHE_DIR", new=tmp_path):
             loaded_analysis, cached = load_analysis(filepath)
             assert not cached, "hmm, test interference?"
@@ -245,7 +297,7 @@ class TestResults:
                 analysis, _ = load_analysis(DATA_DIR / "invalid-data-format.analysis.json")
 
     def test_load_analysis_caching(self, tmp_path: Path) -> None:
-        _, filepath = self.get_basic_analysis()
+        _, filepath = get_basic_analysis()
         with patch("diff_shades.results.CACHE_DIR", new=tmp_path):
             analysis, cached = load_analysis(filepath)
             assert not cached
@@ -270,7 +322,7 @@ class TestResults:
                 load_analysis(DATA_DIR / "too-many-members.analysis.zip")
 
     def test_save_analysis_with_zip(self, tmp_path: Path) -> None:
-        analysis, known_good_path = self.get_basic_analysis()
+        analysis, known_good_path = get_basic_analysis()
         save_analysis(tmp_path / "analysis.zip", analysis)
         with ZipFile(tmp_path / "analysis.zip") as zfile:
             with zfile.open("analysis.json") as f:
@@ -318,3 +370,107 @@ class TestResults:
 
 def test_run_as_package() -> None:
     run_cmd([sys.executable, "-m", "diff_shades", "--version"])
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "basic.analysis.json",
+        "diff-shades-default.analysis.json",
+        "diff-shades-default.analysis.zip",
+    ],
+)
+def test_show(filename: str, runner: CLIRunner) -> None:
+    runner.check(["show", DATA_DIR / filename])
+
+
+@pytest.mark.parametrize("file", ["myfile", "mysecondfile", "mythirdfile"])
+def test_show_with_file(file: str, runner: CLIRunner) -> None:
+    runner.check(["show", DATA_DIR / "failing-2.json", "daylily", file])
+
+
+def test_show_with_file_result_attribute(runner: CLIRunner) -> None:
+    analysis, filepath = get_basic_analysis()
+    r = runner.check(["show", filepath, "test", "a.py", "src"])
+    assert analysis.results["test"]["a.py"].src in r.stdout
+
+
+def test_show_with_file_result_attribute_logged(runner: CLIRunner, tmp_path: Path) -> None:
+    analysis, filepath = get_basic_analysis()
+    log = tmp_path / "log.html"
+    cmd = [sys.executable, "-m", "diff_shades"]
+    cmd = [*cmd, "--dump-html", str(log)]
+    cmd = [*cmd, "show", str(filepath), "test", "a.py", "src", "--quiet"]
+    run_cmd(cmd)
+    contents = log.read_text("utf-8")
+    assert analysis.results["test"]["a.py"].src in contents
+
+
+@pytest.mark.parametrize("filename", ["basic.analysis.json", "failing.json"])
+def test_show_failed_with_check(filename: str, runner: CLIRunner) -> None:
+    r = runner.run(["show-failed", DATA_DIR / filename, "--check"])
+    r.assert_return_code(1 if "failing" in filename else 0)
+
+
+def test_show_failed_specific_project(runner: CLIRunner) -> None:
+    runner.check(["show-failed", DATA_DIR / "failing.json", "daylily"])
+
+
+def test_show_failed_show_log(runner: CLIRunner) -> None:
+    runner.check(["show-failed", DATA_DIR / "failing.json", "--show-log"])
+
+
+def test_compare_without_changes_diff(runner: CLIRunner) -> None:
+    cmd: SupportedArgs = [
+        "compare",
+        DATA_DIR / "failing.json",
+        DATA_DIR / "failing.json",
+        "--check",
+        "--diff",
+    ]
+    r = runner.check(cmd)
+    assert "Nothing-changed." in r.stdout
+
+
+def test_compare_with_changes(runner: CLIRunner) -> None:
+    r = runner.check(["compare", DATA_DIR / "failing.json", DATA_DIR / "failing-2.json"])
+    assert "Differences found." in r.stdout
+
+
+def test_compare_with_changes_diff(runner: CLIRunner) -> None:
+    cmd: SupportedArgs = [
+        "compare",
+        DATA_DIR / "failing.json",
+        DATA_DIR / "failing-2.json",
+        "--check",
+        "--diff",
+    ]
+    r = runner.run(cmd)
+    r.assert_return_code(1)
+
+
+def test_analyze_specific_project(runner: CLIRunner, tmp_path: Path) -> None:
+    runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades"])
+
+
+def test_analyze_project_caching(runner: CLIRunner, tmp_path: Path) -> None:
+    out = tmp_path / "analysis.json"
+    cache = tmp_path / "projects-cache"
+    runner.check(["analyze", out, "-s", "diff-shades", "-w", cache])
+    with patch("diff_shades.analysis.clone_repo", lambda *args: 1 / 0):
+        runner.check(["analyze", out, "-s", "diff-shades", "-w", cache])
+
+
+def test_analyze_specific_project_custom_args(runner: CLIRunner, tmp_path: Path) -> None:
+    runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades", "--", "-S"])
+
+
+def test_analyze_repeat_projects_from(runner: CLIRunner, tmp_path: Path) -> None:
+    runner.check(
+        [
+            "analyze",
+            tmp_path / ".json",
+            "--repeat-projects-from",
+            DATA_DIR / "diff-shades-default.analysis.json",
+        ]
+    )
