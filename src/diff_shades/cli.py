@@ -29,6 +29,7 @@ from rich.theme import Theme
 
 import diff_shades
 import diff_shades.results
+from diff_shades._diff import Diff
 from diff_shades.analysis import (
     GIT_BIN,
     RESULT_COLORS,
@@ -38,7 +39,6 @@ from diff_shades.analysis import (
 )
 from diff_shades.config import PROJECTS, Project
 from diff_shades.output import (
-    color_diff,
     make_analysis_summary,
     make_comparison_summary,
     make_project_details_table,
@@ -97,7 +97,7 @@ def compare_project_pair(
                 found_difference = True
 
             diff = diff_two_results(r1, r2, file=f"{project.name}:{file}", diff_failure=True)
-            console.print(color_diff(diff), highlight=False)
+            console.print(diff)
 
     return found_difference
 
@@ -364,7 +364,7 @@ def show(
                 console.print(escape(result.log), highlight=False)
         elif result.type == "reformatted":
             diff = result.diff(file_key)
-            console.print(color_diff(diff), highlight=False)
+            console.print(diff)
 
     elif project_key and not file_key:
         # TODO: implement a list view

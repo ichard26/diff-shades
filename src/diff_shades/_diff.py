@@ -105,7 +105,6 @@ class Diff:
         }[self.theme]
 
     def raw_unified_diff(self) -> Iterator[str]:
-        differ = difflib.Differ()
         lines_lhs = self.lhs.splitlines()
         lines_rhs = self.rhs.splitlines()
         return unified_diff(
@@ -171,13 +170,7 @@ class Diff:
 
         for line in diff:
             if line.startswith("---"):
-                output_lines.append(
-                    Panel(
-                        line,
-                        box=box.DOUBLE,
-                        style="bold",
-                    )
-                )
+                output_lines.append(Text(line, style="bold"))
             elif line.startswith("@@"):
                 output_lines.append(
                     Panel(

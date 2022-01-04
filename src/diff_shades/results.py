@@ -2,7 +2,6 @@
 # > Analysis data representation & processing
 # ==========================================
 
-import difflib
 import hashlib
 import json
 import pickle
@@ -33,6 +32,7 @@ else:
 import platformdirs
 
 import diff_shades
+from diff_shades._diff import Diff
 from diff_shades.config import Project
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
@@ -42,30 +42,15 @@ JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
 
 
-def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
-    """Return a unified diff string between strings `a` and `b`."""
-    a_lines = a.splitlines(keepends=True)
-    b_lines = b.splitlines(keepends=True)
-    diff_lines = []
-    for line in difflib.unified_diff(a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5):
-        # Work around https://bugs.python.org/issue2142. See also:
-        # https://www.gnu.org/software/diffutils/manual/html_node/Incomplete-Lines.html
-        if line[-1] == "\n":
-            diff_lines.append(line)
-        else:
-            diff_lines.append(line + "\n")
-            diff_lines.append("\\ No newline at end of file\n")
-    return "".join(diff_lines)
-
-
-def calculate_line_changes(diff: str) -> Tuple[int, int]:
+def calculate_line_changes(diff: Diff) -> Tuple[int, int]:
     """Return a two-tuple (additions, deletions) of a diff."""
     additions = 0
     deletions = 0
-    for line in diff.splitlines():
-        if line[0] == "+" and not line.startswith("+++"):
+    raw_diff = "\n".join(diff.raw_unified_diff())
+    for line in raw_diff.splitlines():
+        if line.startswith("+ "):
             additions += 1
-        elif line[0] == "-" and not line.startswith("---"):
+        elif line.startswith("- "):
             deletions += 1
 
     return additions, deletions
@@ -108,8 +93,8 @@ class ReformattedResult(_FileResultBase):
             object.__setattr__(self, "line_changes", changes)
 
     @lru_cache(maxsize=None)
-    def diff(self, filepath: str) -> str:
-        return unified_diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}")
+    def diff(self, filepath: str) -> Diff:
+        return Diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}")
 
 
 @dataclass(frozen=True)
@@ -193,7 +178,7 @@ def diff_two_results(
         first_dst = r1.dst if r1.type == "reformatted" else r1.src
         second_dst = r2.dst if r2.type == "reformatted" else r2.src
 
-    return unified_diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
+    return Diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
 
 
 # fmt: off
