@@ -1,14 +1,10 @@
 import difflib
-from turtle import bgcolor
 from typing import Iterator, List, Union
 
-from rich import print
-from rich.color import Color
+from pygments.lexers import get_lexer_by_name
 from rich.console import Console, ConsoleOptions, RenderResult
-from rich.style import Style
 from rich.syntax import Syntax
 from rich.text import Text
-from pygments.lexers import get_lexer_by_name
 
 
 class Diff:
@@ -88,6 +84,7 @@ class Diff:
             for t in token:
                 tokens.append((t, style))
 
+        # Get index of the token in the tokens list so that we can get the required style
         def get_index(token):
             return [x for x, t in enumerate(tokens) if t[0] == token][0]
 
@@ -124,6 +121,7 @@ class Diff:
         text.stylize(f"on {marker_style_map[prev_marker][' ']}")
         new_line.append_text(text)
 
+        # Damn, we have completely rewritten the line, that took a lot of work 🥱
         return new_line
 
     def build_unified_diff(self) -> RenderResult:
@@ -133,9 +131,13 @@ class Diff:
 
         for line in diff:
             if line.startswith("+ "):
-                output_lines.append(self.syntax_higlight(line[2:], self.marker_style["+"][" "]))
+                output_lines.append(
+                    self.syntax_higlight(line[2:], self.marker_style["+"][" "])
+                )
             elif line.startswith("- "):
-                output_lines.append(self.syntax_higlight(line[2:], self.marker_style["-"][" "]))
+                output_lines.append(
+                    self.syntax_higlight(line[2:], self.marker_style["-"][" "])
+                )
             elif line.startswith("? "):
                 line_to_rewrite = output_lines[-1].plain
                 output_lines[-1] = self.rewrite_line(line, line_to_rewrite, prev_marker)
