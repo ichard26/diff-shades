@@ -115,9 +115,9 @@ rejected but unsupported options will be silently ignored... except for the
 file discovery options! Those will have an impact and are highly discouraged
 since they'll be applied to all selected projects.
 
-For very detailed logs on what exactly diff-shades is doing `--verbose` has you
-covered. `--show-project-revision` is a much less noisy alternative to
-`--verbose` which only shows the revisions of the projects to be analyzed.
+Passing `-v` / `--verbose` once will cause project revision information to be
+logged, twice and the result of each file will be emitted. Be warned the latter
+is **very** verbose and noisy!
 
 ### Comparing analyses
 
@@ -287,6 +287,8 @@ black-primer and mypy-primer.
 - `--show-locals` is also forcefully set on GHA.
 - Analyses can now be automatically zipped at save time by using the .zip file
   extension.
+- Removed `--show-project-revision`; instead pass `-v` / `--verbose` twice to
+  achieve the same effect.
 
 **Oh and there's now a logo for diff-shades! woo!**
 

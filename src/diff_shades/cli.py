@@ -14,9 +14,9 @@ from tempfile import TemporaryDirectory
 from typing import Iterator, Optional, Sequence, Set, Tuple
 
 if sys.version_info >= (3, 8):
-    from typing import Final
+    from typing import Final, Literal
 else:
-    from typing_extensions import Final
+    from typing_extensions import Final, Literal
 
 import click
 import rich
@@ -224,13 +224,8 @@ def main(
 )
 @click.option(
     "-v", "--verbose",
-    is_flag=True,
+    count=True,
     help="Be more verbose."
-)
-@click.option(
-    "--show-project-revision",
-    is_flag=True,
-    help="A less noisy alternative to --verbose."
 )
 # fmt: on
 def analyze(
@@ -240,8 +235,7 @@ def analyze(
     exclude: Set[str],
     cli_work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
-    verbose: bool,
-    show_project_revision: bool,
+    verbose: int,
 ) -> None:
     """Run Black against 'millions' of LOC and save the results."""
 
@@ -283,17 +277,12 @@ def analyze(
             title = "[bold cyan]Setting up projects"
             task1 = progress.add_task(title, total=len(projects))
             prepared = setup_projects(
-                projects,
-                work_dir,
-                black_args,
-                progress,
-                task1,
-                verbose or show_project_revision,
+                projects, work_dir, black_args, progress, task1, verbose > 0
             )
 
         with make_rich_progress() as progress:
             task2 = progress.add_task("[bold magenta]Running black")
-            results = analyze_projects(prepared, work_dir, progress, task2, verbose)
+            results = analyze_projects(prepared, work_dir, progress, task2, verbose > 1)
 
         metadata = {
             "black-version": black.__version__,
@@ -376,22 +365,18 @@ def show(
 @click.argument("analysis-path2", metavar="analysis-two", type=READABLE_FILE)
 @click.argument("project_key", metavar="[project]", callback=normalize_input, required=False)
 @click.option("--check", is_flag=True, help="Return 1 if differences were found.")
-@click.option("--diff", "diff_mode", is_flag=True, help="Show a diff of the differences.")
-@click.option("--list", "list_mode", is_flag=True, help="List the differing files.")
+@click.option("--diff", "format", flag_value="diff", help="Show a diff of the differences.")
+@click.option("--list", "format", flag_value="list", help="List the differing files.")
 @click.option("-q", "--quiet", is_flag=True, help="Suppress log messages.")
 def compare(
     analysis_path1: Path,
     analysis_path2: Path,
     check: bool,
     project_key: Optional[str],
-    diff_mode: bool,
-    list_mode: bool,
+    format: Literal[None, "diff", "list"],
     quiet: bool,
 ) -> None:
     """Compare two analyses for differences in the results."""
-
-    if diff_mode and list_mode:
-        raise DSError("--diff and --list can't be used at the same time.")
 
     analysis_one = load_analysis(analysis_path1, msg="first analysis", quiet=quiet)
     analysis_two = load_analysis(analysis_path2, msg="second analysis", quiet=quiet)
@@ -418,11 +403,11 @@ def compare(
         console.print("[bold][nothing-changed]Nothing-changed.")
         sys.exit(0)
 
-    if diff_mode:
+    if format == "diff":
         for project, proj_results, proj_results2 in shared_projects:
             if compare_project_pair(project, proj_results, proj_results2):
                 console.line()
-    elif list_mode:
+    elif format == "list":
         console.print("[error]--list is not implemented yet")
         sys.exit(1)
     else:
