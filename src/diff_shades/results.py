@@ -8,13 +8,13 @@ import pickle
 import sys
 import textwrap
 import time
-from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import (
     Any,
+    ClassVar,
     Dict,
     Iterator,
     Mapping,
@@ -23,7 +23,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    cast,
     overload,
 )
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -50,38 +49,35 @@ JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
 
 
-class _FileResultBase:
-    def __init__(self) -> None:
-        self.src: str
-        self.line_count: int
-
-    def __post_init__(self) -> None:
-        if self.line_count == -1:
-            lines = max(1, self.src.count("\n"))
-            object.__setattr__(self, "line_count", lines)
+def _convert_line_count(instance: "FileResult") -> None:
+    if instance.line_count == -1:
+        lines = max(1, instance.src.count("\n"))
+        object.__setattr__(instance, "line_count", lines)
 
 
 @dataclass(frozen=True)
-class NothingChangedResult(_FileResultBase):
-    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
+class NothingChangedResult:
     src: str
     line_count: int = -1
+    type: ClassVar[Literal["nothing-changed"]] = "nothing-changed"
 
     @property
     def line_changes(self) -> Tuple[int, int]:
         return (0, 0)
 
+    __post_init__ = _convert_line_count
+
 
 @dataclass(frozen=True)
-class ReformattedResult(_FileResultBase):
-    type: Literal["reformatted"] = field(default="reformatted", init=False)
+class ReformattedResult:
     src: str
     dst: str
     line_count: int = -1
     line_changes: Tuple[int, int] = (-1, -1)
+    type: ClassVar[Literal["reformatted"]] = "reformatted"
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        _convert_line_count(self)
         if self.line_changes == (-1, -1):
             changes = calculate_line_changes(self.diff("throw-away-name"))
             object.__setattr__(self, "line_changes", changes)
@@ -92,17 +88,19 @@ class ReformattedResult(_FileResultBase):
 
 
 @dataclass(frozen=True)
-class FailedResult(_FileResultBase):
-    type: Literal["failed"] = field(default="failed", init=False)
+class FailedResult:
     src: str
     error: str
     message: str
     log: Optional[str] = None
     line_count: int = -1
+    type: ClassVar[Literal["failed"]] = "failed"
 
     @property
     def line_changes(self) -> Tuple[int, int]:
         return (0, 0)
+
+    __post_init__ = _convert_line_count
 
 
 FileResult = Union[FailedResult, ReformattedResult, NothingChangedResult]
@@ -130,7 +128,7 @@ class ProjectResults(Dict[str, FileResult]):
 class Analysis:
     projects: Dict[ProjectName, Project]
     results: Dict[ProjectName, ProjectResults]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, JSON] = field(default_factory=dict)
 
     def __iter__(self) -> Iterator[ProjectResults]:
         return iter(self.results.values())
@@ -250,16 +248,18 @@ def calculate_cache_key(filepath: Path) -> str:
 
 
 def load_analysis_contents(data: JSON) -> Analysis:
-    result_classes: Dict[str, Type[FileResult]] = {
-        "reformatted": ReformattedResult,
-        "nothing-changed": NothingChangedResult,
-        "failed": FailedResult,
-    }
-
     def _parse_file_result(r: JSON) -> FileResult:
-        cls = result_classes[r.pop("type")]
+        rtype: ResultTypes = r.pop("type")
+        cls: Type[FileResult]
+        if rtype == "reformatted":
+            cls = ReformattedResult
+        elif rtype == "nothing-changed":
+            cls = NothingChangedResult
+        elif rtype == "failed":
+            cls = FailedResult
         if "line_changes" in r:
             r["line_changes"] = tuple(r["line_changes"])
+
         return cls(**r)
 
     projects = {name: Project(**config) for name, config in data["projects"].items()}
@@ -345,22 +345,22 @@ def save_analysis(filepath: Path, analysis: Analysis) -> None:
 def make_analysis_summary(analysis: Analysis) -> Panel:
     main_table = Table.grid()
     stats_table = Table.grid()
+    stats_table_two = Table.grid(expand=True)
 
     file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
     file_table.add_column("Result")
     file_table.add_column("# of files")
+    for rtype in ("nothing-changed", "reformatted", "failed"):
+        count = len(filter_results(analysis.files(), rtype))
+        file_table.add_row(rtype, str(count), style=rtype)
+
     project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
     project_table.add_column("Result")
     project_table.add_column("# of projects")
-    for type in ("nothing-changed", "reformatted", "failed"):
-        count = len(filter_results(analysis.files(), type))
-        file_table.add_row(type, str(count), style=type)
-    type_counts = Counter(proj.overall_result for proj in analysis)
-    for type in ("nothing-changed", "reformatted", "failed"):
-        count = type_counts.get(cast(ResultTypes, type), 0)
-        project_table.add_row(type, str(count), style=type)
+    for rtype in ("nothing-changed", "reformatted", "failed"):
+        count = sum(proj.overall_result == rtype for proj in analysis)
+        project_table.add_row(rtype, str(count), style=rtype)
     stats_table.add_row(file_table, "   ", project_table)
-    main_table.add_row(stats_table)
 
     additions, deletions = analysis.line_changes
     left_stats = f"""
@@ -373,21 +373,21 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
         f"\n[green]{readable_int(additions)} additions[/]"
         f" - [red]{readable_int(deletions)} deletions"
     )
-    stats_table_two = Table.grid(expand=True)
     stats_table_two.add_row(
         textwrap.dedent(left_stats), Text.from_markup(right_stats, justify="right")
     )
+
+    main_table.add_row(stats_table)
     main_table.add_row(stats_table_two)
     extra_args = analysis.metadata.get("black-extra-args")
     if extra_args:
         pretty_args = Text(" ".join(extra_args), style="itatic", justify="center")
         main_table.add_row(Panel(pretty_args, title="\[custom arguments]", border_style="dim"))
-    created_at = datetime.fromisoformat(analysis.metadata["created-at"])
-    subtitle = (
-        f"[dim]black {analysis.metadata['black-version']} -"
-        f" {created_at.strftime('%b %d %Y %X')} UTC"
-    )
 
+    black_version = analysis.metadata["black-version"]
+    created_at = datetime.fromisoformat(analysis.metadata["created-at"])
+    created_at_string = created_at.strftime("%b %d %Y %X") + " UTC"
+    subtitle = f"[dim]black {black_version} - {created_at_string}"
     return Panel(main_table, title="[bold]Summary", subtitle=subtitle, expand=False)
 
 
