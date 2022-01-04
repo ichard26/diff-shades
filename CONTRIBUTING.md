@@ -14,11 +14,10 @@
   Once again, pipx is encouraged. It's optional; and you can always use the
   `lint` Nox session instead.
 
-To run the smoke tests (proper tests TBD) simply run `nox -s smoke-tests`. If
-you need to run the "test suite" with a specific version of Black you can use
-the `--black-req` option. For example,
-`nox -s smoke-tests-3.8 -- --black-req "black==21.5b2"`. Note that the `--` is
-important since the option was implemented at the session level and is 100%
+To run the test suite simply run `nox -s tests`. If you need to run the tests
+with a specific version of Black you can use the `--black-req` option. For
+example, `nox -s tests-3.8 -- --black-req "black==21.5b2"`. Note that the `--`
+is important since the option was implemented at the session level and is 100%
 custom.
 
 You might find it helpful to have a virtual environment to manually test out

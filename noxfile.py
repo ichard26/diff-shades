@@ -51,7 +51,7 @@ def get_option(session: nox.Session, name: str) -> Optional[str]:
         except IndexError:
             session.warn(f"[WARN] missing argument to {name}")
         else:
-            del session.posargs[index : index + 1]
+            del session.posargs[index : index + 2]
             assert isinstance(value, str)
             return value
 
@@ -84,6 +84,8 @@ def tests(session: nox.Session) -> None:
     session.run(*cmd, *session.posargs)
     if coverage:
         session.run("coverage", "html")
+        # For some reason, a stray empty coverage is left behind, let's delete it.
+        # TODO: figure out why it is created in the first place and fix the underlying issue
         for c in THIS_DIR.glob(".coverage.*"):
             if not c.read_bytes():
                 wipe(session, c)

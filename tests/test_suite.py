@@ -2,6 +2,7 @@
 # TODO: test compare with analyses that don't share the same set of projects
 # TODO: test the full matrix of supported data formats
 
+import os
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,7 @@ THIS_DIR: Final = Path(__file__).parent
 DATA_DIR: Final = THIS_DIR / "data"
 GIT_BIN: Final = shutil.which("git")
 DIFF_SHADES_GIT_URL: Final = "https://github.com/ichard26/diff-shades.git"
+WINDOWS: Final = sys.platform.startswith("win")
 run_cmd: Final = partial(
     subprocess.run,
     check=True,
@@ -450,7 +452,14 @@ def test_compare_with_changes_diff(runner: CLIRunner) -> None:
 
 
 def test_analyze_specific_project(runner: CLIRunner, tmp_path: Path) -> None:
-    runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades"])
+    try:
+        runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades"])
+    except PermissionError:
+        if WINDOWS and os.getenv("CI"):
+            # Windows on GHA doesn't allow .git's contents to be deleted.
+            pass
+        else:
+            raise
 
 
 def test_analyze_project_caching(runner: CLIRunner, tmp_path: Path) -> None:
@@ -462,15 +471,29 @@ def test_analyze_project_caching(runner: CLIRunner, tmp_path: Path) -> None:
 
 
 def test_analyze_specific_project_custom_args(runner: CLIRunner, tmp_path: Path) -> None:
-    runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades", "--", "-S"])
+    try:
+        runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades", "--", "-S"])
+    except PermissionError:
+        if WINDOWS and os.getenv("CI"):
+            # Windows on GHA doesn't allow .git's contents to be deleted.
+            pass
+        else:
+            raise
 
 
 def test_analyze_repeat_projects_from(runner: CLIRunner, tmp_path: Path) -> None:
-    runner.check(
-        [
-            "analyze",
-            tmp_path / ".json",
-            "--repeat-projects-from",
-            DATA_DIR / "diff-shades-default.analysis.json",
-        ]
-    )
+    try:
+        runner.check(
+            [
+                "analyze",
+                tmp_path / ".json",
+                "--repeat-projects-from",
+                DATA_DIR / "diff-shades-default.analysis.json",
+            ]
+        )
+    except PermissionError:
+        if WINDOWS and os.getenv("CI"):
+            # Windows on GHA doesn't allow .git's contents to be deleted.
+            pass
+        else:
+            raise

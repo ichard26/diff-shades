@@ -53,10 +53,10 @@ jobs:
           python -m pip install pip wheel --upgrade
           python -m pip install nox
 
-      - name: Run nox smoke-tests session (latest PyPI black)
-        run: nox --force-color --verbose -s smoke-tests-${{ matrix.python }}
+      - name: Run nox tests session (latest PyPI black)
+        run: nox --force-color --verbose -s tests-${{ matrix.python }} -- --color=yes -v --durations 10
 
-      - name: Run nox smoke-tests session (main black)
+      - name: Run nox tests session (main black)
         run: >
-          nox --force-color --verbose -s smoke-tests-${{ matrix.python }} --reuse-existing-virtualenvs
-          -- --black-req git+https://github.com/psf/black.git
+          nox --force-color --verbose -s tests-${{ matrix.python }} --reuse-existing-virtualenvs
+          -- --black-req git+https://github.com/psf/black.git --color=yes -v --durations 10
