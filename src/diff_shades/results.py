@@ -2,13 +2,15 @@
 # > Analysis data representation & processing
 # ==========================================
 
-import difflib
 import hashlib
 import json
 import pickle
 import sys
+import textwrap
 import time
+from collections import Counter
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import (
@@ -21,6 +23,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     overload,
 )
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -31,44 +34,20 @@ else:
     from typing_extensions import Final, Literal
 
 import platformdirs
+import rich
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 import diff_shades
 from diff_shades.config import Project
+from diff_shades.utils import DSError, calculate_line_changes, readable_int, unified_diff
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
 CACHE_MAX_ENTRIES: Final = 5
 CACHE_LAST_ACCESS_CUTOFF: Final = 60 * 60 * 24 * 5
 JSON = Any
 ResultTypes = Literal["nothing-changed", "reformatted", "failed"]
-
-
-def unified_diff(a: str, b: str, a_name: str, b_name: str) -> str:
-    """Return a unified diff string between strings `a` and `b`."""
-    a_lines = a.splitlines(keepends=True)
-    b_lines = b.splitlines(keepends=True)
-    diff_lines = []
-    for line in difflib.unified_diff(a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5):
-        # Work around https://bugs.python.org/issue2142. See also:
-        # https://www.gnu.org/software/diffutils/manual/html_node/Incomplete-Lines.html
-        if line[-1] == "\n":
-            diff_lines.append(line)
-        else:
-            diff_lines.append(line + "\n")
-            diff_lines.append("\\ No newline at end of file\n")
-    return "".join(diff_lines)
-
-
-def calculate_line_changes(diff: str) -> Tuple[int, int]:
-    """Return a two-tuple (additions, deletions) of a diff."""
-    additions = 0
-    deletions = 0
-    for line in diff.splitlines():
-        if line[0] == "+" and not line.startswith("+++"):
-            additions += 1
-        elif line[0] == "-" and not line.startswith("---"):
-            deletions += 1
-
-    return additions, deletions
 
 
 class _FileResultBase:
@@ -323,10 +302,9 @@ def load_analysis(filepath: Path) -> Tuple[Analysis, bool]:
         with ZipFile(filepath) as zfile:
             entries = zfile.infolist()
             if len(entries) > 1:
-                # TODO: improve the error message handling for the whole tool
-                raise ValueError(
-                    f"{filepath} contains more than one member."
-                    " Please unzip and pass the right file manually."
+                raise DSError(
+                    f"'{filepath}' contains more than one member.",
+                    tip="Please unzip and pass the right file manually.",
                 )
 
             with zfile.open(entries[0]) as f:
@@ -357,3 +335,123 @@ def save_analysis(filepath: Path, analysis: Analysis) -> None:
             zfile.writestr("analysis.json", blob)
     else:
         filepath.write_text(blob, encoding="utf-8")
+
+
+# ========================= #
+# Result summarization & stats
+# ======================= #
+
+
+def make_analysis_summary(analysis: Analysis) -> Panel:
+    main_table = Table.grid()
+    stats_table = Table.grid()
+
+    file_table = Table(title="File breakdown", show_edge=False, box=rich.box.SIMPLE)
+    file_table.add_column("Result")
+    file_table.add_column("# of files")
+    project_table = Table(title="Project breakdown", show_edge=False, box=rich.box.SIMPLE)
+    project_table.add_column("Result")
+    project_table.add_column("# of projects")
+    for type in ("nothing-changed", "reformatted", "failed"):
+        count = len(filter_results(analysis.files(), type))
+        file_table.add_row(type, str(count), style=type)
+    type_counts = Counter(proj.overall_result for proj in analysis)
+    for type in ("nothing-changed", "reformatted", "failed"):
+        count = type_counts.get(cast(ResultTypes, type), 0)
+        project_table.add_row(type, str(count), style=type)
+    stats_table.add_row(file_table, "   ", project_table)
+    main_table.add_row(stats_table)
+
+    additions, deletions = analysis.line_changes
+    left_stats = f"""
+        [bold]# of lines: {readable_int(analysis.line_count)}
+        # of files: {len(analysis.files())}
+        # of projects: {len(analysis.projects)}\
+    """
+    right_stats = (
+        f"\n\n[bold]{readable_int(additions + deletions)} changes in total[/]"
+        f"\n[green]{readable_int(additions)} additions[/]"
+        f" - [red]{readable_int(deletions)} deletions"
+    )
+    stats_table_two = Table.grid(expand=True)
+    stats_table_two.add_row(
+        textwrap.dedent(left_stats), Text.from_markup(right_stats, justify="right")
+    )
+    main_table.add_row(stats_table_two)
+    extra_args = analysis.metadata.get("black-extra-args")
+    if extra_args:
+        pretty_args = Text(" ".join(extra_args), style="itatic", justify="center")
+        main_table.add_row(Panel(pretty_args, title="\[custom arguments]", border_style="dim"))
+    created_at = datetime.fromisoformat(analysis.metadata["created-at"])
+    subtitle = (
+        f"[dim]black {analysis.metadata['black-version']} -"
+        f" {created_at.strftime('%b %d %Y %X')} UTC"
+    )
+
+    return Panel(main_table, title="[bold]Summary", subtitle=subtitle, expand=False)
+
+
+def make_comparison_summary(
+    project_pairs: Sequence[Tuple[ProjectResults, ProjectResults]],
+) -> Panel:
+    # NOTE: This code assumes both project results used the same project revision.
+    lines = sum(p.line_count for p, _ in project_pairs)
+    files = sum(len(p) for p, _ in project_pairs)
+    differing_projects = 0
+    differing_files = 0
+    additions = 0
+    deletions = 0
+    for results_one, results_two in project_pairs:
+        if results_one != results_two:
+            differing_projects += 1
+            for file, r1 in results_one.items():
+                r2 = results_two[file]
+                if r1 != r2:
+                    differing_files += 1
+                    if "failed" not in (r1.type, r2.type):
+                        diff = diff_two_results(r1, r2, "throwaway")
+                        changes = calculate_line_changes(diff)
+                        additions += changes[0]
+                        deletions += changes[1]
+
+    def fmt(number: int) -> str:
+        return "[cyan]" + readable_int(number) + "[/cyan]"
+
+    line = fmt(differing_projects) + " projects & " + fmt(differing_files) + " files changed /"
+    line += f" {fmt(additions + deletions)} changes"
+    line += f" [[green]+{readable_int(additions)}[/]/[red]-{readable_int(deletions)}[/]]"
+    line += f"\n\n... out of {fmt(lines)} lines"
+    line += f", {fmt(files)} files"
+    line += f" & {fmt(len(project_pairs))} projects"
+    return Panel(line, title="[bold]Summary", expand=False)
+
+
+def make_project_details_table(analysis: Analysis) -> Table:
+    project_table = Table(show_edge=False, box=rich.box.SIMPLE)
+    project_table.add_column("Name")
+    project_table.add_column("Results (n/r/f)")
+    project_table.add_column("Line changes (total +/-)")
+    project_table.add_column("# files")
+    project_table.add_column("# lines")
+    for proj, proj_results in analysis.results.items():
+        results = ""
+        for type in ("nothing-changed", "reformatted", "failed"):
+            count = len(filter_results(proj_results, type))
+            results += f"[{type}]{count}[/]/"
+        results = results[:-1]
+
+        additions, deletions = proj_results.line_changes
+        if additions or deletions:
+            line_changes = (
+                f"{readable_int(additions + deletions)}"
+                f" [[green]{readable_int(additions)}[/]"
+                f"/[red]{readable_int(deletions)}[/]]"
+            )
+        else:
+            line_changes = "n/a"
+        file_count = str(len(proj_results))
+        line_count = readable_int(proj_results.line_count)
+        color = proj_results.overall_result
+        project_table.add_row(proj, results, line_changes, file_count, line_count, style=color)
+
+    return project_table

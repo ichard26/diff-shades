@@ -35,25 +35,22 @@ from diff_shades.analysis import (
     setup_projects,
 )
 from diff_shades.config import PROJECTS, Project
-from diff_shades.output import (
-    color_diff,
-    make_analysis_summary,
-    make_comparison_summary,
-    make_project_details_table,
-    make_rich_progress,
-)
 from diff_shades.results import (
     Analysis,
     ProjectResults,
     diff_two_results,
     filter_results,
+    make_analysis_summary,
+    make_comparison_summary,
+    make_project_details_table,
     save_analysis,
 )
+from diff_shades.utils import DSError, color_diff, make_rich_progress
 
 console: Final = rich.get_console()
 normalize_input: Final = lambda ctx, param, v: v.casefold() if v is not None else None
 READABLE_FILE: Final = click.Path(
-    resolve_path=True, exists=True, dir_okay=False, readable=True, path_type=Path
+    resolve_path=True, exists=True, dir_okay=False, path_type=Path
 )
 WRITABLE_FILE: Final = click.Path(
     resolve_path=True, dir_okay=False, readable=False, writable=True, path_type=Path
@@ -116,6 +113,14 @@ def check_black_args(args: Sequence[str]) -> None:
         console.print(f"[error]Invalid black arguments: {' '.join(args)}\n")
         console.print(e.stdout.strip(), style="italic")
         sys.exit(1)
+
+
+def entrypoint() -> None:
+    try:
+        main()
+    except DSError as err:
+        console.print(err)
+        sys.exit(2)
 
 
 @click.group()
@@ -243,21 +248,17 @@ def analyze(
     try:
         import black
     except ImportError as err:
-        console.print(f"[error]Couldn't import black: {err}")
-        console.print("[info]╰─> This command requires an installation of Black.")
-        sys.exit(1)
+        raise DSError(f"Couldn't import black: {err}", tip="This command requires Black.")
 
     if GIT_BIN is None:
-        console.print("[error]Couldn't find a Git executable.")
-        console.print("[info]╰─> This command requires git sadly enough.")
-        sys.exit(1)
+        raise DSError(
+            "Couldn't find a Git executable.", tip="This command requires git sadly enough."
+        )
 
     if results_path.exists() and results_path.is_file():
         console.log(f"[warning]Overwriting {results_path} as it already exists!")
     elif results_path.exists() and results_path.is_dir():
-        console.print(f"[error]{results_path} is a pre-existing directory.")
-        console.print("[info]╰─> Can't continue as I won't overwrite a directory.")
-        sys.exit(1)
+        raise DSError(f"{results_path} is a pre-existing directory.")
 
     if black_args:
         check_black_args(black_args)
@@ -334,14 +335,14 @@ def show(
         try:
             result = analysis.results[project_key][file_key]
         except KeyError:
-            console.print(f"[error]'{file_key}' couldn't be found under {project_key}.")
-            sys.exit(1)
+            raise DSError(f"'{file_key}' couldn't be found under {project_key}.")
 
         if field_key:
             if not hasattr(result, field_key):
-                console.print(f"[error]{file_key} has no '{field_key}' field.")
-                console.print(f"[bold]-> FYI the file's status is {result.type}")
-                sys.exit(1)
+                raise DSError(
+                    f"{file_key} has no '{field_key}' field.",
+                    tip="FYI the file's status is {result.type}",
+                )
 
             console.print(getattr(result, field_key), highlight=False, soft_wrap=True)
 
@@ -360,8 +361,7 @@ def show(
     elif project_key and not file_key:
         # TODO: implement a list view
         # TODO: implement a diff + failures view
-        console.print("[error]show-ing a project is not implemented, sorry!")
-        sys.exit(26)
+        raise DSError("show-ing a project is not implemented, sorry!")
 
     else:
         panel = make_analysis_summary(analysis)
@@ -391,8 +391,7 @@ def compare(
     """Compare two analyses for differences in the results."""
 
     if diff_mode and list_mode:
-        console.print("[error]--diff and --list can't be used at the same time.")
-        sys.exit(1)
+        raise DSError("--diff and --list can't be used at the same time.")
 
     analysis_one = load_analysis(analysis_path1, msg="first analysis", quiet=quiet)
     analysis_two = load_analysis(analysis_path2, msg="second analysis", quiet=quiet)
@@ -445,8 +444,7 @@ def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: 
     console.line()
 
     if key and key not in analysis.projects:
-        console.print(f"[error]The project '{key}' couldn't be found.")
-        sys.exit(1)
+        raise DSError(f"The project '{key}' couldn't be found.")
 
     failed_projects = 0
     failed_files = 0
@@ -471,3 +469,7 @@ def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: 
     console.print(f"[bold]# of failed projects: {failed_projects}")
     if check:
         sys.exit(bool(failed_files))
+
+
+if __name__ == "__main__":
+    entrypoint()

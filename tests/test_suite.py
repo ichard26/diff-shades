@@ -40,6 +40,7 @@ from diff_shades.results import (
     load_analysis,
     save_analysis,
 )
+from diff_shades.utils import DSError
 
 THIS_DIR: Final = Path(__file__).parent
 DATA_DIR: Final = THIS_DIR / "data"
@@ -295,7 +296,7 @@ class TestResults:
             assert not cached, "hmm, test interference?"
             assert analysis == loaded_analysis
 
-            with pytest.raises(ValueError, match="unsupported analysis format"):
+            with pytest.raises(DSError, match="unsupported analysis format"):
                 analysis, _ = load_analysis(DATA_DIR / "invalid-data-format.analysis.json")
 
     def test_load_analysis_caching(self, tmp_path: Path) -> None:

@@ -41,7 +41,7 @@ test = [
 ]
 
 [project.scripts]
-diff-shades = "diff_shades.cli:main"
+diff-shades = "diff_shades.cli:entrypoint"
 
 [project.urls]
 Repository = "https://github.com/ichard26/diff-shades"
