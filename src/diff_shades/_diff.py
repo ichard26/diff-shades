@@ -2,9 +2,43 @@ import difflib
 from typing import Iterator, List, Union
 
 from pygments.lexers import get_lexer_by_name
+from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
+from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
+
+
+def unified_diff(a, b, fromfile="", tofile="", fromfiledate="", tofiledate="", n=3):
+    """Costum implementation of the unified diff, largely inspired from the implementation of difflib @ cpython."""
+    started = False
+    diff = difflib.Differ()
+    for group in difflib.SequenceMatcher(None, a, b).get_grouped_opcodes(n):
+        if not started:
+            started = True
+            fromdate = "\t{}".format(fromfiledate) if fromfiledate else ""
+            todate = "\t{}".format(tofiledate) if tofiledate else ""
+            yield "--- {}{}\n+++ {}{}".format(fromfile, fromdate, tofile, todate)
+
+        first, last = group[0], group[-1]
+        file1_range = difflib._format_range_unified(first[1], last[2])
+        file2_range = difflib._format_range_unified(first[3], last[4])
+        yield "\n"
+        yield "@@ -{} +{} @@".format(file1_range, file2_range)
+
+        for tag, alo, ahi, blo, bhi in group:
+            if tag == "replace":
+                g = diff._fancy_replace(a, alo, ahi, b, blo, bhi)
+            elif tag == "delete":
+                g = diff._dump("-", a, alo, ahi)
+            elif tag == "insert":
+                g = diff._dump("+", b, blo, bhi)
+            elif tag == "equal":
+                g = diff._dump(" ", a, alo, ahi)
+            else:
+                raise ValueError("unknown tag %r" % (tag,))
+
+            yield from g
 
 
 class Diff:
@@ -14,11 +48,15 @@ class Diff:
         self,
         lhs: str,
         rhs: str,
+        lhs_name: str,
+        rhs_name: str,
         theme: str = "dark",
     ) -> None:
         self.lhs = lhs
         self.rhs = rhs
         self.theme = theme
+        self.lhs_name = lhs_name
+        self.rhs_name = rhs_name
 
         self.lexer = get_lexer_by_name(
             "python3",
@@ -70,7 +108,9 @@ class Diff:
         differ = difflib.Differ()
         lines_lhs = self.lhs.splitlines()
         lines_rhs = self.rhs.splitlines()
-        return differ.compare(lines_lhs, lines_rhs)
+        return unified_diff(
+            lines_lhs, lines_rhs, fromfile=self.rhs_name, tofile=self.lhs_name, n=5
+        )
 
     def rewrite_line(self, line, line_to_rewrite, prev_marker):
         marker_style_map = self.marker_style.copy()
@@ -130,7 +170,23 @@ class Diff:
         output_lines: List[Text] = []
 
         for line in diff:
-            if line.startswith("+ "):
+            if line.startswith("---"):
+                output_lines.append(
+                    Panel(
+                        line,
+                        box=box.DOUBLE,
+                        style="bold",
+                    )
+                )
+            elif line.startswith("@@"):
+                output_lines.append(
+                    Panel(
+                        line,
+                        box=box.ROUNDED,
+                        style="cyan",
+                    )
+                )
+            elif line.startswith("+ "):
                 output_lines.append(
                     self.syntax_higlight(line[2:], self.marker_style["+"][" "])
                 )
