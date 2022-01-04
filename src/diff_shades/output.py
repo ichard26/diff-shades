@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Sequence, Tuple, cast
 
 import rich
-from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TimeElapsedColumn
 from rich.table import Table
@@ -24,22 +23,6 @@ from diff_shades.results import (
 )
 
 console = rich.get_console()
-
-
-def color_diff(contents: str) -> str:
-    """Inject rich markup into the diff."""
-    lines = escape(contents).split("\n")
-    for i, line in enumerate(lines):
-        if line.startswith("+++") or line.startswith("---"):
-            line = "[bold]" + line + "[/]"
-        elif line.startswith("@@"):
-            line = "[cyan]" + line + "[/]"
-        elif line.startswith("+"):
-            line = "[green]" + line + "[/]"
-        elif line.startswith("-"):
-            line = "[red]" + line + "[/]"
-        lines[i] = line
-    return "\n".join(lines)
 
 
 def make_rich_progress() -> Progress:
