@@ -92,8 +92,7 @@ class CLIRunner:
         return CLIResult(r, cmd=sargs)
 
     def check(self, args: SupportedArgs, **kwargs: Any) -> CLIResult:
-        sargs = [str(a) for a in args]
-        result = self.run(sargs, **kwargs)
+        result = self.run(args, **kwargs)
         result.assert_return_code(0)
         return result
 
@@ -296,7 +295,7 @@ class TestResults:
             assert not cached, "hmm, test interference?"
             assert analysis == loaded_analysis
 
-            with pytest.raises(DSError, match="unsupported analysis format"):
+            with pytest.raises(ValueError, match="unsupported analysis format"):
                 analysis, _ = load_analysis(DATA_DIR / "invalid-data-format.analysis.json")
 
     def test_load_analysis_caching(self, tmp_path: Path) -> None:
@@ -321,7 +320,7 @@ class TestResults:
             analysis2, _ = load_analysis(DATA_DIR / "diff-shades-default.analysis.zip")
             assert analysis == analysis2
 
-            with pytest.raises(ValueError, match="more than one member"):
+            with pytest.raises(DSError, match="more than one member"):
                 load_analysis(DATA_DIR / "too-many-members.analysis.zip")
 
     def test_save_analysis_with_zip(self, tmp_path: Path) -> None:

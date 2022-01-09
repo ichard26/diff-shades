@@ -14,7 +14,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import (
     Any,
-    ClassVar,
     Dict,
     Iterator,
     Mapping,
@@ -57,9 +56,9 @@ def _convert_line_count(instance: "FileResult") -> None:
 
 @dataclass(frozen=True)
 class NothingChangedResult:
+    type: Literal["nothing-changed"] = field(default="nothing-changed", init=False)
     src: str
     line_count: int = -1
-    type: ClassVar[Literal["nothing-changed"]] = "nothing-changed"
 
     @property
     def line_changes(self) -> Tuple[int, int]:
@@ -70,11 +69,11 @@ class NothingChangedResult:
 
 @dataclass(frozen=True)
 class ReformattedResult:
+    type: Literal["reformatted"] = field(default="reformatted", init=False)
     src: str
     dst: str
     line_count: int = -1
     line_changes: Tuple[int, int] = (-1, -1)
-    type: ClassVar[Literal["reformatted"]] = "reformatted"
 
     def __post_init__(self) -> None:
         _convert_line_count(self)
@@ -89,12 +88,12 @@ class ReformattedResult:
 
 @dataclass(frozen=True)
 class FailedResult:
+    type: Literal["failed"] = field(default="failed", init=False)
     src: str
     error: str
     message: str
     log: Optional[str] = None
     line_count: int = -1
-    type: ClassVar[Literal["failed"]] = "failed"
 
     @property
     def line_changes(self) -> Tuple[int, int]:

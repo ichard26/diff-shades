@@ -216,11 +216,7 @@ def main(
 @click.option(
     "--repeat-projects-from",
     type=READABLE_FILE,
-    help=(
-        "Use the same projects (and commits!) used during another analysis."
-        " This is similar to --work-dir but for when you don't have the"
-        " checkouts available."
-    )
+    help="Use the same projects (and commits!) used during another analysis."
 )
 @click.option(
     "-v", "--verbose",

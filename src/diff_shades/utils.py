@@ -14,6 +14,9 @@ class DSError(Exception):
     error: str
     tip: Optional[str] = None
 
+    def __str__(self) -> str:
+        return f"{self.error} -> {self.tip}"
+
     def __rich__(self) -> str:
         if self.tip:
             return f"[error]{escape(self.error)}[/]\n[info]╰─> {escape(self.tip)}[/]"
