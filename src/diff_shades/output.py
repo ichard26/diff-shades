@@ -112,7 +112,7 @@ def make_comparison_summary(
                 if r1 != r2:
                     differing_files += 1
                     if "failed" not in (r1.type, r2.type):
-                        diff = diff_two_results(r1, r2, "throwaway")
+                        diff = diff_two_results(r1, r2, "throwaway", theme="dark")
                         changes = calculate_line_changes(diff)
                         additions += changes[0]
                         deletions += changes[1]

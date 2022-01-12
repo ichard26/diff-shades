@@ -89,12 +89,12 @@ class ReformattedResult(_FileResultBase):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.line_changes == (-1, -1):
-            changes = calculate_line_changes(self.diff("throw-away-name"))
+            changes = calculate_line_changes(self.diff("throw-away-name", theme="dark"))
             object.__setattr__(self, "line_changes", changes)
 
     @lru_cache(maxsize=None)
-    def diff(self, filepath: str) -> Diff:
-        return Diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}")
+    def diff(self, filepath: str, theme: Literal["dark", "light"]) -> Diff:
+        return Diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}", theme=theme)
 
 
 @dataclass(frozen=True)
@@ -161,7 +161,7 @@ class Analysis:
 
 
 def diff_two_results(
-    r1: FileResult, r2: FileResult, file: str, diff_failure: bool = False
+    r1: FileResult, r2: FileResult, file: str, theme: Literal["dark", "light"], diff_failure: bool = False
 ) -> str:
     """Compare two results for the same file producing a diff.
 
@@ -178,7 +178,7 @@ def diff_two_results(
         first_dst = r1.dst if r1.type == "reformatted" else r1.src
         second_dst = r2.dst if r2.type == "reformatted" else r2.src
 
-    return Diff(first_dst, second_dst, f"a/{file}", f"b/{file}")
+    return Diff(first_dst, second_dst, f"a/{file}", f"b/{file}", theme=theme)
 
 
 # fmt: off

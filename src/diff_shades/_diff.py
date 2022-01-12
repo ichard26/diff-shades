@@ -1,5 +1,5 @@
 import difflib
-from typing import Iterator, List, Union
+from typing import Iterator, List, Literal, Union
 
 from pygments.lexers import get_lexer_by_name
 from rich import box
@@ -18,7 +18,7 @@ class Diff:
         rhs: str,
         lhs_name: str,
         rhs_name: str,
-        theme: str = "dark",
+        theme: Literal["dark", "light"] = "dark",
     ) -> None:
         self.lhs = lhs
         self.rhs = rhs

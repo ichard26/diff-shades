@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterator, Optional, Sequence, Set, Tuple
+from typing import Iterator, Literal, Optional, Sequence, Set, Tuple
 
 if sys.version_info >= (3, 8):
     from typing import Final
@@ -78,7 +78,7 @@ def get_work_dir(*, use: Optional[Path] = None) -> Iterator[Path]:
 
 
 def compare_project_pair(
-    project: Project, results: ProjectResults, results2: ProjectResults
+    project: Project, results: ProjectResults, results2: ProjectResults, theme: Literal["dark", "light"]
 ) -> bool:
     found_difference = False
     header = f"\[{project.name} - {project.url}]"
@@ -96,7 +96,7 @@ def compare_project_pair(
                 console.print(f"[reformatted]{revision}")
                 found_difference = True
 
-            diff = diff_two_results(r1, r2, file=f"{project.name}:{file}", diff_failure=True)
+            diff = diff_two_results(r1, r2, file=f"{project.name}:{file}", theme=theme, diff_failure=True)
             console.print(diff)
 
     return found_difference
@@ -325,12 +325,14 @@ def analyze(
 @click.argument("file_key", metavar="[file]", required=False)
 @click.argument("field_key", metavar="[field]", callback=normalize_input, required=False)
 @click.option("-q", "--quiet", is_flag=True, help="Suppress log messages.")
+@click.option("--light", is_flag=True, help="Use light coloured theme for rich diff highlighting.")
 def show(
     analysis_path: Path,
     project_key: Optional[str],
     file_key: Optional[str],
     field_key: Optional[str],
     quiet: bool,
+    light: bool,
 ) -> None:
     """
     Show results or metadata from an analysis.
@@ -363,7 +365,7 @@ def show(
                 console.line()
                 console.print(escape(result.log), highlight=False)
         elif result.type == "reformatted":
-            diff = result.diff(file_key)
+            diff = result.diff(file_key, theme="light" if light else "dark")
             console.print(diff)
 
     elif project_key and not file_key:
@@ -388,6 +390,7 @@ def show(
 @click.option("--diff", "diff_mode", is_flag=True, help="Show a diff of the differences.")
 @click.option("--list", "list_mode", is_flag=True, help="List the differing files.")
 @click.option("-q", "--quiet", is_flag=True, help="Suppress log messages.")
+@click.option("--light", is_flag=True, help="Use light coloured theme for rich diff highlighting.")
 def compare(
     analysis_path1: Path,
     analysis_path2: Path,
@@ -396,6 +399,7 @@ def compare(
     diff_mode: bool,
     list_mode: bool,
     quiet: bool,
+    light: bool,
 ) -> None:
     """Compare two analyses for differences in the results."""
 
@@ -430,7 +434,7 @@ def compare(
 
     if diff_mode:
         for project, proj_results, proj_results2 in shared_projects:
-            if compare_project_pair(project, proj_results, proj_results2):
+            if compare_project_pair(project, proj_results, proj_results2, theme="light" if light else "dark"):
                 console.line()
     elif list_mode:
         console.print("[error]--list is not implemented yet")
