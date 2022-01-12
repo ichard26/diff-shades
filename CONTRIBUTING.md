@@ -39,7 +39,7 @@ Maintainers, the main things you need to know are the following:
   psf/black integration implements won't cause issues.[^1]
 
 Finally, regardless if you are a contributor or a co-maintainer, thank you for
-your help! If you get stuck, don’t hesistate to ask for help on the relevant
+your help! If you get stuck, don’t hesitate to ask for help on the relevant
 issue or PR. Alternatively, we can talk in the #black-formatter[^2] text
 channel on Python Discord. Here’s an
 [invite link](https://discord.gg/RtVdv86PrH)!
