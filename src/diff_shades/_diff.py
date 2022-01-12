@@ -9,38 +9,6 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 
-def unified_diff(a, b, fromfile="", tofile="", fromfiledate="", tofiledate="", n=3):
-    """Costum implementation of the unified diff, largely inspired from the implementation of difflib @ cpython."""
-    started = False
-    diff = difflib.Differ()
-    for group in difflib.SequenceMatcher(None, a, b).get_grouped_opcodes(n):
-        if not started:
-            started = True
-            fromdate = "\t{}".format(fromfiledate) if fromfiledate else ""
-            todate = "\t{}".format(tofiledate) if tofiledate else ""
-            yield "--- {}{}\n+++ {}{}".format(fromfile, fromdate, tofile, todate)
-
-        first, last = group[0], group[-1]
-        file1_range = difflib._format_range_unified(first[1], last[2])
-        file2_range = difflib._format_range_unified(first[3], last[4])
-        yield "\n"
-        yield "@@ -{} +{} @@".format(file1_range, file2_range)
-
-        for tag, alo, ahi, blo, bhi in group:
-            if tag == "replace":
-                g = diff._fancy_replace(a, alo, ahi, b, blo, bhi)
-            elif tag == "delete":
-                g = diff._dump("-", a, alo, ahi)
-            elif tag == "insert":
-                g = diff._dump("+", b, blo, bhi)
-            elif tag == "equal":
-                g = diff._dump(" ", a, alo, ahi)
-            else:
-                raise ValueError("unknown tag %r" % (tag,))
-
-            yield from g
-
-
 class Diff:
     """Constructs a Diff object to render diff-highlighted code."""
 
@@ -104,12 +72,35 @@ class Diff:
             },
         }[self.theme]
 
-    def raw_unified_diff(self) -> Iterator[str]:
-        lines_lhs = self.lhs.splitlines()
-        lines_rhs = self.rhs.splitlines()
-        return unified_diff(
-            lines_lhs, lines_rhs, fromfile=self.rhs_name, tofile=self.lhs_name, n=5
-        )
+    def raw_unified_diff(self, n: int = 3) -> Iterator[str]:
+        """Costum implementation of the unified diff, largely inspired from the implementation of difflib @ cpython."""
+        lhs = self.lhs.splitlines()
+        rhs = self.rhs.splitlines()
+
+        started = False
+        diff = difflib.Differ()
+        for group in difflib.SequenceMatcher(None, lhs, rhs).get_grouped_opcodes(n):
+            if not started:
+                started = True
+                yield "--- {}\n+++ {}".format(self.rhs_name, self.lhs_name)
+
+            first, last = group[0], group[-1]
+            file1_range = f"{first[1]},{last[2]}"
+            file2_range = f"{first[3]},{last[4]}"
+            yield "\n"
+            yield "@@ -{} +{} @@".format(file1_range, file2_range)
+
+            for tag, alo, ahi, blo, bhi in group:
+                if tag == "replace":
+                    g = diff._fancy_replace(lhs, alo, ahi, rhs, blo, bhi)
+                elif tag == "delete":
+                    g = diff._dump("-", lhs, alo, ahi)
+                elif tag == "insert":
+                    g = diff._dump("+", rhs, blo, bhi)
+                elif tag == "equal":
+                    g = diff._dump(" ", lhs, alo, ahi)
+
+                yield from g
 
     def rewrite_line(self, line, line_to_rewrite, prev_marker):
         marker_style_map = self.marker_style.copy()
@@ -163,8 +154,9 @@ class Diff:
         # Damn, we have completely rewritten the line, that took a lot of work 🥱
         return new_line
 
-    def build_unified_diff(self) -> RenderResult:
-        diff = self.raw_unified_diff()
+    def build_rich_diff(self) -> RenderResult:
+        """Compare `self.lhs` and `self.rhs` to generate the delta as a rich unified diff."""
+        diff = self.raw_unified_diff(n=5)
         prev_marker = ""
         output_lines: List[Text] = []
 
@@ -176,7 +168,7 @@ class Diff:
                     Panel(
                         line,
                         box=box.ROUNDED,
-                        style="cyan",
+                        style="cyan" if self.theme == "dark" else "blue",
                     )
                 )
             elif line.startswith("+ "):
@@ -197,4 +189,4 @@ class Diff:
         return output_lines
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
-        yield from self.build_unified_diff()
+        yield from self.build_rich_diff()
