@@ -377,6 +377,11 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
     )
 
     main_table.add_row(stats_table)
+
+    forced_style = analysis.metadata.get("forced-style")
+    if forced_style:
+        main_table.add_row(f"\n[bold]Forced code style:[/] {forced_style}")
+
     main_table.add_row(stats_table_two)
     extra_args = analysis.metadata.get("black-extra-args")
     if extra_args:

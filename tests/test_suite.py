@@ -1,23 +1,25 @@
 # TODO: assert output once diff-shades has a better std/out/err story
 # TODO: test compare with analyses that don't share the same set of projects
 # TODO: test the full matrix of supported data formats
+# TODO: add clone cachig to analysis integration tests
 
 import os
 import shutil
 import subprocess
 import sys
 import textwrap
+from contextlib import contextmanager
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Sequence, Tuple, Union
+from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union
 from unittest.mock import patch
 from zipfile import ZipFile
 
 if sys.version_info >= (3, 8):
-    from typing import Final
+    from typing import Final, Literal
 else:
-    from typing_extensions import Final
+    from typing_extensions import Final, Literal
 
 import black
 import click
@@ -62,6 +64,16 @@ assert GIT_BIN, "running tests requires a discoverable Git binary"
 def read_data(name: str) -> str:
     path = Path(DATA_DIR, name)
     return path.read_text(encoding="utf-8")
+
+
+@contextmanager
+def suppress_windows_permission_error() -> Iterator[None]:
+    """Windows on GHA doesn't allow .git's contents to be deleted."""
+    try:
+        yield
+    except PermissionError:
+        if not (WINDOWS and os.getenv("CI")):
+            raise
 
 
 class CLIResult:
@@ -152,13 +164,22 @@ class TestAnalysis:
         assert sha == "7a89fde30be692e21ffc70b0e8fbade59e322319"
         assert msg == "Branding: add logo ❀"
 
-    def test_get_files_and_mode(self) -> None:
+    @pytest.mark.xfail(raises=AssertionError, reason="mypyc breaks monkeypatching")
+    def test_get_files_and_mode_single(self) -> None:
         get_files_and_mode = diff_shades.analysis.get_files_and_mode
 
         single_proj = Project("single-file-proj", "throwaway-url")
         files, mode = get_files_and_mode(single_proj, DATA_DIR / "single-file-proj")
         expected = [DATA_DIR / "single-file-proj" / "a.py"]
         assert files == sorted(expected) and mode == black.Mode(line_length=79)
+
+        files, mode = get_files_and_mode(
+            single_proj, DATA_DIR / "single-file-proj", extra_args=("-l", "100")
+        )
+        assert len(files) == 1 and mode == black.Mode(line_length=100)
+
+    def test_get_files_and_mode_multi(self) -> None:
+        get_files_and_mode = diff_shades.analysis.get_files_and_mode
 
         multi_proj = Project("multi-file-proj", "throwaway-url")
         files, mode = get_files_and_mode(multi_proj, DATA_DIR / "multi-file-proj")
@@ -168,10 +189,17 @@ class TestAnalysis:
         ]
         assert files == sorted(expected) and mode == black.Mode(line_length=79)
 
-        files, mode = get_files_and_mode(
-            single_proj, DATA_DIR / "single-file-proj", extra_args=("-l", "100")
-        )
-        assert len(files) == 1 and mode == black.Mode(line_length=100)
+    @pytest.mark.skipif(
+        not hasattr(black.Mode(), "preview"), reason="current black doesn't support --preview"
+    )
+    @pytest.mark.parametrize("flag", [None, "stable", "preview"])
+    def test_get_files_and_mode_force_style(
+        self, flag: Optional[Literal["stable", "preview"]]
+    ) -> None:
+        get_files_and_mode = diff_shades.analysis.get_files_and_mode
+        multi_proj = Project("multi-file-proj", "throwaway-url")
+        files, mode = get_files_and_mode(multi_proj, DATA_DIR / "multi-file-proj", flag)
+        assert mode.preview is (flag == "preview")
 
     def test_suppress_output(self, capfd: pytest.CaptureFixture) -> None:
         with diff_shades.analysis.suppress_output():
@@ -452,14 +480,8 @@ def test_compare_with_changes_diff(runner: CLIRunner) -> None:
 
 
 def test_analyze_specific_project(runner: CLIRunner, tmp_path: Path) -> None:
-    try:
+    with suppress_windows_permission_error():
         runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades"])
-    except PermissionError:
-        if WINDOWS and os.getenv("CI"):
-            # Windows on GHA doesn't allow .git's contents to be deleted.
-            pass
-        else:
-            raise
 
 
 def test_analyze_project_caching(runner: CLIRunner, tmp_path: Path) -> None:
@@ -471,29 +493,17 @@ def test_analyze_project_caching(runner: CLIRunner, tmp_path: Path) -> None:
 
 
 def test_analyze_specific_project_custom_args(runner: CLIRunner, tmp_path: Path) -> None:
-    try:
+    with suppress_windows_permission_error():
         runner.check(["analyze", tmp_path / ".json", "-s", "diff-shades", "--", "-S"])
-    except PermissionError:
-        if WINDOWS and os.getenv("CI"):
-            # Windows on GHA doesn't allow .git's contents to be deleted.
-            pass
-        else:
-            raise
 
 
 def test_analyze_repeat_projects_from(runner: CLIRunner, tmp_path: Path) -> None:
-    try:
-        runner.check(
-            [
-                "analyze",
-                tmp_path / ".json",
-                "--repeat-projects-from",
-                DATA_DIR / "diff-shades-default.analysis.json",
-            ]
-        )
-    except PermissionError:
-        if WINDOWS and os.getenv("CI"):
-            # Windows on GHA doesn't allow .git's contents to be deleted.
-            pass
-        else:
-            raise
+    # TODO: check the list of projects within the analysis file
+    cmd: SupportedArgs = [
+        "analyze",
+        tmp_path / ".json",
+        "--repeat-projects-from",
+        DATA_DIR / "diff-shades-default.analysis.json",
+    ]
+    with suppress_windows_permission_error():
+        runner.check(cmd)

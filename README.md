@@ -266,7 +266,8 @@ Please check the list of analyzed projects for their licensing details.
 
 Maintainers:
 
-- Richard S. ([@ichard26](https://github.com/ichard26))
+- Richard Si ([@ichard26](https://github.com/ichard26))
+- Jelle Zijlstra ([@JelleZijlstra](https://github.com/JelleZijlstra))
 
 diff-shades also sees outside contributions whose contributors I greatly
 appreciate. A list of all contributors can be found on the
@@ -280,8 +281,11 @@ black-primer and mypy-primer.
 
 ## Changelog
 
-### (unreleased)
+### 22.3a1
 
+- Added `--force-stable-style` and `--force-preview-style` to forcefully set
+  the code style across **all** projects.
+- Added `-r` as a short alias of `--repeat-projects-from`.
 - Log files produced when a file fails to format are now recorded and can be
   pulled via the `show` or `show-failed` commands.
 - `--show-locals` is also forcefully set on GHA.

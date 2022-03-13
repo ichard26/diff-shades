@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 if sys.version_info >= (3, 8):
-    from typing import Final
+    from typing import Final, Literal
 else:
-    from typing_extensions import Final
+    from typing_extensions import Final, Literal
 
 if TYPE_CHECKING:
     import black
@@ -76,6 +76,7 @@ def get_commit(repo: Path) -> Tuple[CommitSHA, CommitMsg]:
 def setup_projects(
     projects: List[Project],
     workdir: Path,
+    force_style: Optional[Literal["stable", "preview"]],
     extra_args: Sequence[str],
     progress: rich.progress.Progress,
     task: rich.progress.TaskID,
@@ -106,7 +107,7 @@ def setup_projects(
             console.log(f"[dim]  commit -> {commit_msg}", highlight=False)
             console.log(f"[dim]  commit -> {commit_sha}")
         proj = replace(proj, commit=commit_sha)
-        files, mode = get_files_and_mode(proj, target, extra_args)
+        files, mode = get_files_and_mode(proj, target, force_style, extra_args)
         ready.append((proj, files, mode))
         progress.advance(task)
         progress.refresh()
@@ -127,7 +128,10 @@ def suppress_output() -> Iterator:
 
 
 def get_files_and_mode(
-    project: Project, path: Path, extra_args: Sequence[str] = ()
+    project: Project,
+    path: Path,
+    force_style: Optional[Literal["stable", "preview"]] = None,
+    extra_args: Sequence[str] = (),
 ) -> Tuple[List[Path], "black.Mode"]:
     # HACK: I know this is hacky but the benefit is I don't need to copy and
     # paste a bunch of black's argument parsing, file discovery, and
@@ -160,7 +164,9 @@ def get_files_and_mode(
         cmd = [str(path), *project.custom_arguments, *extra_args, "--check"]
         black.main(cmd, standalone_mode=False)
 
-    assert files and isinstance(mode, black.Mode), (files, mode)
+    assert files and isinstance(mode, black.FileMode), (files, mode)
+    if force_style:
+        mode = replace(mode, preview=(force_style == "preview"))
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 

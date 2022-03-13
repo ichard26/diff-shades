@@ -104,9 +104,11 @@ def compare_project_pair(
 
 
 def check_black_args(args: Sequence[str]) -> None:
-    """Assert `args` are valid (and also warn on questionable arguments)."""
+    """Assert `args` are valid and warn on questionable arguments."""
     if "--fast" in args or "--safe" in args:
         console.log("[warning]--fast/--safe is ignored, Black is always ran in safe mode.")
+    if set(args).intersection({"--force-exclude", "--exclude", "--include", "-e", "-i"}):
+        console.log("[warning]File discovery options only play nice with one project!")
     try:
         run_cmd([sys.executable, "-m", "black", "-", *args], input="daylily")
     except subprocess.CalledProcessError as e:
@@ -214,9 +216,15 @@ def main(
     )
 )
 @click.option(
-    "--repeat-projects-from",
+    "-r", "--repeat-projects-from",
     type=READABLE_FILE,
     help="Use the same projects (and commits!) used during another analysis."
+)
+@click.option(
+    "-S/-P", "--force-stable-style/--force-preview-style", "force_style",
+    default=None,
+    callback=lambda ctx, p, v: {False: "preview", True: "stable", None: None}[v],
+    help="Forcefully use the stable or preview style for all projects."
 )
 @click.option(
     "-v", "--verbose",
@@ -231,6 +239,7 @@ def analyze(
     exclude: Set[str],
     cli_work_dir: Optional[Path],
     repeat_projects_from: Optional[Path],
+    force_style: Optional[Literal["stable", "preview"]],
     verbose: int,
 ) -> None:
     """Run Black against 'millions' of LOC and save the results."""
@@ -249,6 +258,15 @@ def analyze(
         console.log(f"[warning]Overwriting {results_path} as it already exists!")
     elif results_path.exists() and results_path.is_dir():
         raise DSError(f"{results_path} is a pre-existing directory.")
+
+    if force_style:
+        try:
+            black.FileMode(preview=True)
+        except TypeError:
+            console.log(
+                "[warning]Installed black doesn't support --preview, ignoring style flag."
+            )
+            force_style = None
 
     if black_args:
         check_black_args(black_args)
@@ -273,7 +291,7 @@ def analyze(
             title = "[bold cyan]Setting up projects"
             task1 = progress.add_task(title, total=len(projects))
             prepared = setup_projects(
-                projects, work_dir, black_args, progress, task1, verbose > 0
+                projects, work_dir, force_style, black_args, progress, task1, verbose > 0
             )
 
         with make_rich_progress() as progress:
@@ -283,8 +301,9 @@ def analyze(
         metadata = {
             "black-version": black.__version__,
             "black-extra-args": black_args,
+            "forced-style": force_style,
             "created-at": datetime.now(timezone.utc).isoformat(),
-            "data-format": 1.1,
+            "data-format": 1.2,
         }
         analysis = Analysis(
             projects={p.name: p for p, _, _ in prepared}, results=results, metadata=metadata
