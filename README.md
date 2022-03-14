@@ -291,6 +291,8 @@ black-primer and mypy-primer.
 - `--show-locals` is also forcefully set on GHA.
 - Analyses can now be automatically zipped at save time by using the .zip file
   extension.
+- Fixed output suppresion during project setup, hopefully this is the last fix
+  needed to avoid stray output ^^
 - Removed `--show-project-revision`; instead pass `-v` / `--verbose` twice to
   achieve the same effect.
 

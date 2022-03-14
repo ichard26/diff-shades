@@ -166,7 +166,9 @@ def get_files_and_mode(
 
     assert files and isinstance(mode, black.FileMode), (files, mode)
     if force_style:
-        mode = replace(mode, preview=(force_style == "preview"))
+        with suppress_output():
+            mode = replace(mode, preview=(force_style == "preview"))
+
     return sorted(p for p in files if p.suffix in (".py", ".pyi")), mode
 
 
@@ -178,7 +180,8 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
 
     mode = mode or black.FileMode()
     if path.suffix == ".pyi":
-        mode = replace(mode, is_pyi=True)
+        with suppress_output():
+            mode = replace(mode, is_pyi=True)
 
     src = path.read_text("utf8")
     try:
