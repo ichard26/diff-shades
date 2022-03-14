@@ -442,6 +442,17 @@ def test_show_failed_with_check(filename: str, runner: CLIRunner) -> None:
     r.assert_return_code(1 if "failing" in filename else 0)
 
 
+def test_show_failed_with_check_allowed_failure(runner: CLIRunner) -> None:
+    cmd: SupportedArgs = [
+        "show-failed",
+        DATA_DIR / "failing.json",
+        "--check",
+        "--check-allow",
+        "irisa:my-other-file",
+    ]
+    runner.check(cmd)
+
+
 def test_show_failed_specific_project(runner: CLIRunner) -> None:
     runner.check(["show-failed", DATA_DIR / "failing.json", "daylily"])
 

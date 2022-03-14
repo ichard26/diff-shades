@@ -436,7 +436,19 @@ def compare(
 @click.argument("key", metavar="project", callback=normalize_input, required=False)
 @click.option("--show-log", is_flag=True, help="Show log files if present as well.")
 @click.option("--check", is_flag=True, help="Return 1 if there's a failure.")
-def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: bool) -> None:
+@click.option(
+    "--check-allow",
+    multiple=True,
+    callback=lambda ctx, p, v: set(v),
+    help="Ignore these failures when determining return code (--check).",
+)
+def show_failed(
+    analysis_path: Path,
+    key: Optional[str],
+    show_log: bool,
+    check: bool,
+    check_allow: Set[str],
+) -> None:
     """
     Show and check for failed files in an analysis.
     """
@@ -448,6 +460,7 @@ def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: 
 
     failed_projects = 0
     failed_files = 0
+    disallowed_failures = 0
     for proj_name, proj_results in analysis.results.items():
         if key and key != proj_name:
             continue
@@ -459,6 +472,11 @@ def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: 
             console.print(f"[bold red]{proj_name}:", highlight=False)
             for number, (file, result) in enumerate(failed.items(), start=1):
                 s = f"{number}. {file}: {escape(result.error)} - {escape(result.message)}"
+                if f"{proj_name}:{file}" in check_allow:
+                    s += "[dim] (allowed)[/]"
+                else:
+                    disallowed_failures += 1
+
                 console.print(Padding(s, (0, 0, 0, 2)), highlight=False)
                 if result.log is not None and show_log:
                     padded = Padding(escape(result.log), (0, 0, 0, 4))
@@ -468,7 +486,7 @@ def show_failed(analysis_path: Path, key: Optional[str], show_log: bool, check: 
     console.print(f"[bold]# of failed files: {failed_files}")
     console.print(f"[bold]# of failed projects: {failed_projects}")
     if check:
-        sys.exit(bool(failed_files))
+        sys.exit(disallowed_failures > 0)
 
 
 if __name__ == "__main__":

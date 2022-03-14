@@ -286,6 +286,8 @@ black-primer and mypy-primer.
 - Added `--force-stable-style` and `--force-preview-style` to forcefully set
   the code style across **all** projects.
 - Added `-r` as a short alias of `--repeat-projects-from`.
+- Added `--check-allow` so pre-existing failures don't cause
+  `show-failed --check` to return one.
 - Log files produced when a file fails to format are now recorded and can be
   pulled via the `show` or `show-failed` commands.
 - `--show-locals` is also forcefully set on GHA.
