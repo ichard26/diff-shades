@@ -196,9 +196,12 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
         # If this error contains a log file, let's record it!
         if "helpful: " in msg:
             _, file_path = msg.split("helpful: ")
-            logpath = Path(file_path)
-            if logpath.name.startswith("blk") and logpath.suffix == ".log":
-                log = logpath.read_text("utf-8")
+            log_path = Path(file_path)
+            if log_path.name.startswith("blk") and log_path.suffix == ".log":
+                log = log_path.read_text("utf-8")
+                # The log files have randomized names and we need to get rid of this so
+                # identical runs record the same error messages.
+                msg = msg.replace(str(log_path), "(use diff-shades show or show-failures)")
 
         return FailedResult(src, err.__class__.__name__, msg, log=log)
 

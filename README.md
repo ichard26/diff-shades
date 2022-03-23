@@ -281,6 +281,11 @@ black-primer and mypy-primer.
 
 ## Changelog
 
+### *unreleased*
+
+- Normalize log file paths for AST equivalence / stability check errors to
+  avoid constant run to run differences.
+
 ### 22.3a1
 
 - Added `--force-stable-style` and `--force-preview-style` to forcefully set

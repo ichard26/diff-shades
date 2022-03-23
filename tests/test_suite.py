@@ -139,6 +139,7 @@ class TestAnalysis:
         r = check_file(DATA_DIR / "failed.py")
         assert isinstance(r, FailedResult) and r.type == "failed"
         assert r.error == "AssertionError" and r.log
+        assert "(use diff-shades show or show-failures)" in r.message
         r = check_file(
             DATA_DIR / "reformatted.py", mode=black.Mode(string_normalization=False)
         )
