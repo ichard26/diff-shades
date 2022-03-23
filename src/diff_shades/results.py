@@ -10,7 +10,6 @@ import textwrap
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import (
     Any,
@@ -81,7 +80,6 @@ class ReformattedResult:
             changes = calculate_line_changes(self.diff("throw-away-name"))
             object.__setattr__(self, "line_changes", changes)
 
-    @lru_cache(maxsize=None)
     def diff(self, filepath: str) -> str:
         return unified_diff(self.src, self.dst, f"a/{filepath}", f"b/{filepath}")
 

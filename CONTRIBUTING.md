@@ -44,11 +44,11 @@ channel on Python Discord. Here’s an
 [invite link](https://discord.gg/RtVdv86PrH)!
 
 [^1]: I'll fix this with a hash based solution eventually, but for now let's be
-careful.
+    careful.
 
-[^2]: I know it’s specifically for Black, but diff-shades is a development tool for
-Black so I consider it acceptable - although I never asked … but then again, I
-am a maintainer of Black so yeah :p
+[^2]: I know it’s specifically for Black, but diff-shades is a development tool
+    for Black so I consider it acceptable - although I never asked … but then
+    again, I am a maintainer of Black so yeah :p
 
 [nox]: https://nox.thea.codes/en/stable/
 [pre-commit]: https://pre-commit.com/

@@ -187,7 +187,7 @@ def main(
         shutil.rmtree(diff_shades.results.CACHE_DIR)
     diff_shades.results.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if dump_html:
-        atexit.register(console.save_html, path=dump_html)
+        atexit.register(console.save_html, path=str(dump_html))
 
 
 # fmt: off
