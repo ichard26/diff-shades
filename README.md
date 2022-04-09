@@ -285,6 +285,8 @@ black-primer and mypy-primer.
 
 - Normalize log file paths for AST equivalence / stability check errors to
   avoid constant run to run differences.
+- Colour the `(allowed)` tag green emitted by `show-failed` so it's more
+  visible
 
 ### 22.3a1
 

@@ -473,7 +473,7 @@ def show_failed(
             for number, (file, result) in enumerate(failed.items(), start=1):
                 s = f"{number}. {file}: {escape(result.error)} - {escape(result.message)}"
                 if f"{proj_name}:{file}" in check_allow:
-                    s += "[dim] (allowed)[/]"
+                    s += "[green] (allowed)[/]"
                 else:
                     disallowed_failures += 1
 
