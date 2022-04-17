@@ -385,6 +385,10 @@ black-primer and mypy-primer.
 
 ## Changelog
 
+### *unreleased*
+
+- nothing yet!
+
 ### 22.4b1
 
 - Record tracebacks for failures too. `show-failed` will show 'em with
