@@ -139,7 +139,7 @@ class TestAnalysis:
         r = check_file(DATA_DIR / "failed.py")
         assert isinstance(r, FailedResult) and r.type == "failed"
         assert r.error == "AssertionError" and r.log
-        assert "(use diff-shades show or show-failures)" in r.message
+        assert "(use diff-shades show or show-failed)" in r.message
         r = check_file(
             DATA_DIR / "reformatted.py", mode=black.Mode(string_normalization=False)
         )
@@ -459,7 +459,8 @@ def test_show_failed_specific_project(runner: CLIRunner) -> None:
 
 
 def test_show_failed_show_log(runner: CLIRunner) -> None:
-    runner.check(["show-failed", DATA_DIR / "failing.json", "--show-log"])
+    r = runner.check(["show-failed", DATA_DIR / "data-formats" / "1.3.json", "--show-log"])
+    assert "structlog" in r.stdout and "traceback" in r.stdout
 
 
 def test_compare_without_changes_diff(runner: CLIRunner) -> None:

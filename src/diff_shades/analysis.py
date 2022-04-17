@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import traceback
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from functools import partial
@@ -192,7 +193,7 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
 
     except Exception as err:
         msg = str(err)
-        log = None
+        tb = "".join(traceback.format_exception(None, err, err.__traceback__)).strip()
         # If this error contains a log file, let's record it!
         if "helpful: " in msg:
             _, file_path = msg.split("helpful: ")
@@ -201,9 +202,11 @@ def check_file(path: Path, *, mode: Optional["black.Mode"] = None) -> FileResult
                 log = log_path.read_text("utf-8")
                 # The log files have randomized names and we need to get rid of this so
                 # identical runs record the same error messages.
-                msg = msg.replace(str(log_path), "(use diff-shades show or show-failures)")
+                msg = msg.replace(str(log_path), "(use diff-shades show or show-failed)")
+        else:
+            log = None
 
-        return FailedResult(src, err.__class__.__name__, msg, log=log)
+        return FailedResult(src, err.__class__.__name__, msg, log=log, traceback=tb)
 
     return ReformattedResult(src, dst)
 

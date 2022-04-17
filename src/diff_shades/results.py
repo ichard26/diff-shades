@@ -11,18 +11,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-    overload,
-)
+from typing import Any, Dict, Iterator, Mapping, Optional, Sequence, Tuple, Union, overload
 from zipfile import ZIP_DEFLATED, ZipFile
 
 if sys.version_info >= (3, 8):
@@ -91,6 +80,7 @@ class FailedResult:
     error: str
     message: str
     log: Optional[str] = None
+    traceback: str = ""
     line_count: int = -1
 
     @property
@@ -247,17 +237,14 @@ def calculate_cache_key(filepath: Path) -> str:
 def load_analysis_contents(data: JSON) -> Analysis:
     def _parse_file_result(r: JSON) -> FileResult:
         rtype: ResultTypes = r.pop("type")
-        cls: Type[FileResult]
         if rtype == "reformatted":
-            cls = ReformattedResult
+            if "line_changes" in r:
+                r["line_changes"] = tuple(r["line_changes"])
+            return ReformattedResult(**r)
         elif rtype == "nothing-changed":
-            cls = NothingChangedResult
+            return NothingChangedResult(**r)
         elif rtype == "failed":
-            cls = FailedResult
-        if "line_changes" in r:
-            r["line_changes"] = tuple(r["line_changes"])
-
-        return cls(**r)
+            return FailedResult(**r)
 
     projects = {name: Project(**config) for name, config in data["projects"].items()}
     metadata = {k.replace("_", "-"): v for k, v in data["metadata"].items()}

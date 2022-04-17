@@ -303,7 +303,7 @@ def analyze(
             "black-extra-args": black_args,
             "forced-style": force_style,
             "created-at": datetime.now(timezone.utc).isoformat(),
-            "data-format": 1.2,
+            "data-format": 1.3,
         }
         analysis = Analysis(
             projects={p.name: p for p, _, _ in prepared}, results=results, metadata=metadata
@@ -434,7 +434,9 @@ def compare(
 @main.command("show-failed")
 @click.argument("analysis-path", metavar="analysis", type=READABLE_FILE)
 @click.argument("key", metavar="project", callback=normalize_input, required=False)
-@click.option("--show-log", is_flag=True, help="Show log files if present as well.")
+@click.option(
+    "--show-log", is_flag=True, help="Show log files if present, otherwise tracebacks."
+)
 @click.option("--check", is_flag=True, help="Return 1 if there's a failure.")
 @click.option(
     "--check-allow",
@@ -471,16 +473,19 @@ def show_failed(
         if failed:
             console.print(f"[bold red]{proj_name}:", highlight=False)
             for number, (file, result) in enumerate(failed.items(), start=1):
-                s = f"{number}. {file}: {escape(result.error)} - {escape(result.message)}"
+                s = f"{number}. {file}: {escape(result.error)}"
+                if result.message:
+                    s += f" - {escape(result.message)}"
                 if f"{proj_name}:{file}" in check_allow:
                     s += "[green] (allowed)[/]"
                 else:
                     disallowed_failures += 1
 
-                console.print(Padding(s, (0, 0, 0, 2)), highlight=False)
-                if result.log is not None and show_log:
-                    padded = Padding(escape(result.log), (0, 0, 0, 4))
-                    console.print(padded, highlight=False)
+                console.print(Padding(s, (0, 0, 0, 2), expand=False), highlight=False)
+                if show_log:
+                    escaped = escape(result.log or result.traceback)
+                    padded = Padding(escaped, (0, 0, 0, 4), expand=False)
+                    console.print(padded, highlight=False, style="dim")
             console.line()
 
     console.print(f"[bold]# of failed files: {failed_files}")

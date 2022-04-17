@@ -1,0 +1,55 @@
+{
+  "projects": {
+    "daylily": {
+      "name": "daylily",
+      "url": "daylily://my-code.me",
+      "python_requires": null,
+      "custom_arguments": [],
+      "commit": "abcde"
+    },
+    "irisa": {
+      "name": "irisa",
+      "url": "irisa://my-code.me",
+      "python_requires": null,
+      "custom_arguments": [],
+      "commit": "abcde"
+    }
+  },
+  "results": {
+    "daylily": {
+      "myfile": {
+        "type": "failed",
+        "src": "abcde",
+        "error": "AssertionError",
+        "message": "i feel like crashing today",
+        "log": "structlog",
+        "traceback": "traceback"
+      },
+      "mysecondfile": {
+        "type": "reformatted",
+        "src": "abcde",
+        "dst": "ABCDE"
+      },
+      "mythirdfile": {
+        "type": "nothing-changed",
+        "src": "abcde"
+      }
+    },
+    "irisa": {
+      "my-other-file": {
+        "type": "failed",
+        "src": "abcde",
+        "error": "SystemError",
+        "message": "i'm tired.",
+        "log": null,
+        "traceback": "traceback"
+      }
+    }
+  },
+  "metadata": {
+    "created-at": "2022-04-16T03:06:10.913928+00:00",
+    "black-version": "22.3.0",
+    "forced-style": null,
+    "data-format": 1.3
+  }
+}

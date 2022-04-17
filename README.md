@@ -115,6 +115,10 @@ rejected but unsupported options will be silently ignored... except for the
 file discovery options! Those will have an impact and are highly discouraged
 since they'll be applied to all selected projects.
 
+To force the preview or stable style for *all* projects, you can use the
+`-S`/`--force-stable-style` and `-P`/`--force-preview-style` flags. The latter
+should be identical to passing `-- --preview`.
+
 Passing `-v` / `--verbose` once will cause project revision information to be
 logged, twice and the result of each file will be emitted. Be warned the latter
 is **very** verbose and noisy!
@@ -230,7 +234,107 @@ daylily:
 ```
 
 Asserting that the analysis is failure-free is incredibly simple with
-`--check`.
+`--check`. If you got a failure you'd like to ignore (because say you know of
+it already) you can use `--check-allow` with the long file ID (project + `:` +
+filepath).
+
+diff-shades also records tracebacks and log files, you can show them with
+`--show-tb` and `--show-log` respectively.
+
+```console
+ichard26@acer-ubuntu:~/programming/tools/diff-shades$ diff-shades show-failed temp.json --show-tb
+[18:30:17] Loaded analysis: /home/ichard26/programming/tools/diff-shades/temp.json
+
+black:
+  1. action/main.py: AssertionError
+    Traceback (most recent call last):
+      File "/home/ichard26/programming/tools/diff-shades/src/diff_shades/analysis.py", line 190, in check_file
+        dst = black.format_file_contents(src, fast=False, mode=mode)
+      File "src/black/__init__.py", line 987, in format_file_contents
+      File "src/black/__init__.py", line 1131, in format_str
+      File "src/black/__init__.py", line 1163, in _format_str_once
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1026, in run_transformer
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1026, in run_transformer
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1026, in run_transformer
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1026, in run_transformer
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1026, in run_transformer
+      File "src/black/linegen.py", line 442, in transform_line
+      File "src/black/linegen.py", line 1022, in run_transformer
+      File "src/black/trans.py", line 245, in __call__
+      File "src/black/trans.py", line 1272, in do_transform
+      File "src/black/trans.py", line 1463, in _get_break_idx
+    AssertionError
+
+# of failed files: 1
+# of failed projects: 1
+```
+
+```console
+ichard26@acer-ubuntu:~/programming/tools/diff-shades$ diff-shades show-failed --show-log preview-changes-pr-2991-9a2de75c97.json
+[13:43:38] Loaded analysis: /home/runner/work/black/black/preview-changes-pr-2991-9a2de75c97.json (cached)
+
+sqlalchemy:
+  1. test/orm/test_relationship_criteria.py: AssertionError - INTERNAL ERROR: Black produced different code on the
+  second pass of the formatter.  Please report a bug on https://github.com/psf/black/issues.  This diff might be
+  helpful: (use diff-shades show or show-failures)
+    Mode(target_versions={<TargetVersion.PY37: 7>}, line_length=79, string_normalization=True, is_pyi=False,
+    is_ipynb=False, magic_trailing_comma=True, experimental_string_processing=False, python_cell_magics=set(),
+    preview=True)
+    --- source
+    +++ first pass
+    @@ -1390,16 +1390,15 @@
+                     CompiledSQL(
+                         "SELECT addresses.user_id AS addresses_user_id, "
+                         "addresses.id AS addresses_id, "
+                         "addresses.email_address AS addresses_email_address "
+                         # note the comma-separated FROM clause
+    -                    "FROM addresses, (SELECT addresses_1.id AS id FROM "
+    -                    "addresses AS addresses_1 "
+    -                    "WHERE addresses_1.email_address != :email_address_1) "
+    -                    "AS anon_1 WHERE addresses.user_id "
+    -                    "IN (__[POSTCOMPILE_primary_keys]) "
+    -                    "AND addresses.id = anon_1.id ORDER BY addresses.id",
+    +                    "FROM addresses, (SELECT addresses_1.id AS id FROM"
+    +                    " addresses AS addresses_1 WHERE addresses_1.email_address"
+    +                    " != :email_address_1) AS anon_1 WHERE addresses.user_id"
+    +                    " IN (__[POSTCOMPILE_primary_keys]) AND addresses.id ="
+    +                    " anon_1.id ORDER BY addresses.id",
+                         [
+                             {
+                                 "primary_keys": [7, 8, 9, 10],
+                                 "email_address_1": value,
+                             }
+    --- first pass
+    +++ second pass
+    @@ -1390,15 +1390,11 @@
+                     CompiledSQL(
+                         "SELECT addresses.user_id AS addresses_user_id, "
+                         "addresses.id AS addresses_id, "
+                         "addresses.email_address AS addresses_email_address "
+                         # note the comma-separated FROM clause
+    -                    "FROM addresses, (SELECT addresses_1.id AS id FROM"
+    -                    " addresses AS addresses_1 WHERE addresses_1.email_address"
+    -                    " != :email_address_1) AS anon_1 WHERE addresses.user_id"
+    -                    " IN (__[POSTCOMPILE_primary_keys]) AND addresses.id ="
+    -                    " anon_1.id ORDER BY addresses.id",
+    +                    "FROM addresses, (SELECT addresses_1.id AS id FROM addresses AS addresses_1 WHERE
+    addresses_1.email_address != :email_address_1) AS anon_1 WHERE addresses.user_id IN
+    (__[POSTCOMPILE_primary_keys]) AND addresses.id = anon_1.id ORDER BY addresses.id",
+                         [
+                             {
+                                 "primary_keys": [7, 8, 9, 10],
+                                 "email_address_1": value,
+                             }
+
+
+# of failed files: 1
+# of failed projects: 1
+```
 
 ### Appendix: tips!
 
@@ -283,6 +387,8 @@ black-primer and mypy-primer.
 
 ### *unreleased*
 
+- Record tracebacks for failures too. `show-failed` will show 'em with
+  `--show-log` although log files take precedence.
 - Normalize log file paths for AST equivalence / stability check errors to
   avoid constant run to run differences.
 - Colour the `(allowed)` tag green emitted by `show-failed` so it's more
