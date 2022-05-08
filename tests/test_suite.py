@@ -251,6 +251,11 @@ class TestResults:
         changes = diff_shades.results.calculate_line_changes(diff)
         assert changes == (3, 5)
 
+    def test_compare_failures_with_differing_tracebacks(self) -> None:
+        f1 = FailedResult("src\n", error="Exception", message="no.", traceback="Line 1")
+        f2 = replace(f1, traceback="Line 2")
+        assert f1 == f2
+
     def test_diff_two_results(self) -> None:
         nothing = NothingChangedResult("a\n")
         reformatted = ReformattedResult("a\n", "A\n")

@@ -80,7 +80,7 @@ class FailedResult:
     error: str
     message: str
     log: Optional[str] = None
-    traceback: str = ""
+    traceback: str = field(default="", compare=False)
     line_count: int = -1
 
     @property

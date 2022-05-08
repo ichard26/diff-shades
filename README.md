@@ -387,7 +387,8 @@ black-primer and mypy-primer.
 
 ### *unreleased*
 
-- nothing yet!
+- Tracebacks are now ignored when comparing failures as line numbers often
+  change and are not meaningful.
 
 ### 22.4b1
 
