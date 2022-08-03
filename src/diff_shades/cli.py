@@ -348,7 +348,9 @@ def show(
                     tip="FYI the file's status is {result.type}",
                 )
 
-            console.print(getattr(result, field_key), highlight=False, soft_wrap=True)
+            value = escape(getattr(result, field_key))
+            end = "" if field_key in ("src", "dst") else "\n"
+            console.print(value, end=end, highlight=False, soft_wrap=True)
 
         elif result.type == "nothing-changed":
             console.print("[bold][nothing-changed]Nothing-changed.")
