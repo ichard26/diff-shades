@@ -27,7 +27,7 @@ from rich.text import Text
 
 import diff_shades
 from diff_shades.config import Project
-from diff_shades.utils import DSError, calculate_line_changes, readable_int, unified_diff
+from diff_shades.utils import DSError, calculate_line_changes, fmt_int, unified_diff
 
 CACHE_DIR: Final = Path(platformdirs.user_cache_dir("diff-shades"))
 CACHE_MAX_ENTRIES: Final = 5
@@ -348,14 +348,14 @@ def make_analysis_summary(analysis: Analysis) -> Panel:
 
     additions, deletions = analysis.line_changes
     left_stats = f"""
-        [bold]# of lines: {readable_int(analysis.line_count)}
+        [bold]# of lines: {fmt_int(analysis.line_count)}
         # of files: {len(analysis.files())}
         # of projects: {len(analysis.projects)}\
     """
     right_stats = (
-        f"\n\n[bold]{readable_int(additions + deletions)} changes in total[/]"
-        f"\n[green]{readable_int(additions)} additions[/]"
-        f" - [red]{readable_int(deletions)} deletions"
+        f"\n\n[bold]{fmt_int(additions + deletions)} changes in total[/]"
+        f"\n[green]{fmt_int(additions)} additions[/]"
+        f" - [red]{fmt_int(deletions)} deletions"
     )
     stats_table_two.add_row(
         textwrap.dedent(left_stats), Text.from_markup(right_stats, justify="right")
@@ -404,11 +404,11 @@ def make_comparison_summary(
                         deletions += changes[1]
 
     def fmt(number: int) -> str:
-        return "[cyan]" + readable_int(number) + "[/cyan]"
+        return "[cyan]" + fmt_int(number) + "[/cyan]"
 
     line = fmt(differing_projects) + " projects & " + fmt(differing_files) + " files changed /"
     line += f" {fmt(additions + deletions)} changes"
-    line += f" [[green]+{readable_int(additions)}[/]/[red]-{readable_int(deletions)}[/]]"
+    line += f" [[green]+{fmt_int(additions)}[/]/[red]-{fmt_int(deletions)}[/]]"
     line += f"\n\n... out of {fmt(lines)} lines"
     line += f", {fmt(files)} files"
     line += f" & {fmt(len(project_pairs))} projects"
@@ -432,14 +432,14 @@ def make_project_details_table(analysis: Analysis) -> Table:
         additions, deletions = proj_results.line_changes
         if additions or deletions:
             line_changes = (
-                f"{readable_int(additions + deletions)}"
-                f" [[green]{readable_int(additions)}[/]"
-                f"/[red]{readable_int(deletions)}[/]]"
+                f"{fmt_int(additions + deletions)}"
+                f" [[green]{fmt_int(additions)}[/]"
+                f"/[red]{fmt_int(deletions)}[/]]"
             )
         else:
             line_changes = "n/a"
         file_count = str(len(proj_results))
-        line_count = readable_int(proj_results.line_count)
+        line_count = fmt_int(proj_results.line_count)
         color = proj_results.overall_result
         project_table.add_row(proj, results, line_changes, file_count, line_count, style=color)
 

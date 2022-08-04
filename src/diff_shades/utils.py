@@ -82,7 +82,7 @@ def make_rich_progress() -> Progress:
     )
 
 
-def readable_int(number: int) -> str:
+def fmt_int(number: int) -> str:
     if number < 10000:
         return str(number)
 
