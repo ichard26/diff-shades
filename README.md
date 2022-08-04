@@ -389,6 +389,9 @@ black-primer and mypy-primer.
 
 - Tracebacks are now ignored when comparing failures as line numbers often
   change and are not meaningful.
+- `diff-shades show` no longer emits corrupted attribute output.
+- Support 22.8.0 by patching `black.concurrency.reformat_many` if
+  `black.reformat_many` doesn't exist.
 
 ### 22.4b1
 
