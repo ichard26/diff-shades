@@ -158,8 +158,13 @@ def get_files_and_mode(
         files = [src]
         mode = kwargs["mode"]
 
+    if hasattr(black, "reformat_many"):
+        many_target = "black.reformat_many"
+    else:
+        many_target = "black.concurrency.reformat_many"
+
     # I really should implement better context manager handling in black ...
-    with suppress_output(), patch("black.reformat_many", new=many_shim), patch(
+    with suppress_output(), patch(many_target, new=many_shim), patch(
         "black.reformat_one", new=single_shim
     ):
         cmd = [str(path), *project.custom_arguments, *extra_args, "--check"]
