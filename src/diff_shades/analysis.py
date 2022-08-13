@@ -9,7 +9,7 @@ import sys
 import traceback
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
@@ -43,6 +43,7 @@ run_cmd: Final = partial(
     stderr=subprocess.STDOUT,
 )
 console: Final = rich.get_console()
+
 
 # =====================
 # > Setup and analysis
@@ -128,6 +129,22 @@ def suppress_output() -> Iterator:
                 yield
 
 
+@lru_cache(maxsize=1)
+def _find_black_reformat_many() -> str:
+    # NOTE: this only exists because mypyc puts imports in the global module scope even if
+    # the import is within a function, so after the first run of Black, `black.reformat_many`
+    # will exist even if it doesn't in the source ... >.<
+    import black
+
+    if hasattr(black, "reformat_many"):
+        return "black.reformat_many"
+    else:
+        import black.concurrency
+
+        assert hasattr(black.concurrency, "reformat_many")
+        return "black.concurrency.reformat_many"
+
+
 def get_files_and_mode(
     project: Project,
     path: Path,
@@ -158,11 +175,7 @@ def get_files_and_mode(
         files = [src]
         mode = kwargs["mode"]
 
-    if hasattr(black, "reformat_many"):
-        many_target = "black.reformat_many"
-    else:
-        many_target = "black.concurrency.reformat_many"
-
+    many_target = _find_black_reformat_many()
     # I really should implement better context manager handling in black ...
     with suppress_output(), patch(many_target, new=many_shim), patch(
         "black.reformat_one", new=single_shim
