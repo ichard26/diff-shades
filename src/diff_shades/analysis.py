@@ -180,7 +180,15 @@ def get_files_and_mode(
     with suppress_output(), patch(many_target, new=many_shim), patch(
         "black.reformat_one", new=single_shim
     ):
-        cmd = [str(path), *project.custom_arguments, *extra_args, "--check"]
+        cmd = [
+            str(path),
+            *project.custom_arguments,
+            *extra_args,
+            "--check",
+            # Override the required black version, since we need to run diff-shades
+            # with any future black versions.
+            "--required-version=",
+        ]
         black.main(cmd, standalone_mode=False)
 
     assert files and isinstance(mode, black.FileMode), (files, mode)
@@ -259,7 +267,7 @@ def analyze_projects(
     ) -> ProjectResults:
         file_results = {}
         data_packets = [(file_path, project_path, mode) for file_path in files]
-        for (filepath, result) in pool.imap(check_file_shim, data_packets):
+        for filepath, result in pool.imap(check_file_shim, data_packets):
             if verbose:
                 console.log(f"  {filepath}: [{result.type}]{result.type}")
             file_results[filepath] = result
