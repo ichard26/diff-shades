@@ -29,10 +29,6 @@ shell and OS but usually it's `source .venv/bin/activate` on Linux / MacOS and
 
 Maintainers, the main things you need to know are the following:
 
-- psf/black pulls in whatever is on the `stable` branch so make sure to update
-  this branch regularly once you're sure diff-shades is stable :wink: (note
-  that the pre-commit and Ubuntu CI jobs must pass before updating the branch).
-
 - Please please *please* bump the version in `src/diff_shades/__init__.py`
   *every time* you make a modification to the PROJECTS list so the caching the
   psf/black integration implements won't cause issues.[^1]
