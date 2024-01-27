@@ -34,6 +34,7 @@ from diff_shades.results import (
 )
 
 GIT_BIN: Final = shutil.which("git")
+NUM_PROCESSES: Final = 4
 RESULT_COLORS: Final = {"reformatted": "cyan", "nothing-changed": "magenta", "failed": "red"}
 run_cmd: Final = partial(
     subprocess.run,
@@ -278,7 +279,11 @@ def analyze_projects(
     # Sadly the Pool context manager API doesn't play nice with pytest-cov so
     # we have to use this uglier alternative ...
     # https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html#if-you-use-multiprocessing-pool
-    pool = mp.Pool()
+    pool = mp.Pool(NUM_PROCESSES)
+    console.log(
+        f"[bold]Running analysis with {NUM_PROCESSES} processes "
+        f"(os.cpu_count() = {os.cpu_count()})"
+    )
     try:
         results = {}
         for project, files, mode in projects:
