@@ -35,7 +35,11 @@ class Project:
 PROJECTS: Final = [
     Project("aioexabgp", "https://github.com/cooperlees/aioexabgp.git"),
     Project("attrs", "https://github.com/python-attrs/attrs.git"),
-    Project("bandersnatch", "https://github.com/pypa/bandersnatch.git"),
+    Project(
+        "bandersnatch",
+        "https://github.com/pypa/bandersnatch.git",
+        python_requires=">=3.12",
+    ),
     Project("blackbench", "https://github.com/ichard26/blackbench.git"),
     Project("channel", "https://github.com/django/channels.git"),
     Project("diff-shades", "https://github.com/ichard26/diff-shades.git"),
@@ -43,15 +47,10 @@ PROJECTS: Final = [
         "django",
         "https://github.com/django/django.git",
         custom_arguments=[
-            "--skip-string-normalization",
             "--extend-exclude",
-            (
-                "/((docs|scripts)/|django/forms/models.py"
-                "|tests/gis_tests/test_spatialrefsys.py"
-                "|tests/test_runner_apps/tagged/tests_syntax_error.py)"
-            ),
+            "/tests/test_runner_apps/tagged/tests_syntax_error.py",
         ],
-        python_requires=">=3.8",
+        python_requires=">=3.11",
     ),
     Project("flake8-bugbear", "https://github.com/PyCQA/flake8-bugbear.git"),
     Project("hypothesis", "https://github.com/HypothesisWorks/hypothesis.git"),
@@ -65,8 +64,7 @@ PROJECTS: Final = [
     Project(
         "scikit-lego",
         "https://github.com/koaning/scikit-lego.git",
-        # Uses Python 3.12+ f-string syntax, not yet supported by Black
-        custom_arguments=["--extend-exclude", "/docs/_scripts/feature-selection.py"],
+        python_requires=">=3.12",
     ),
     Project("sqlalchemy", "https://github.com/sqlalchemy/sqlalchemy.git"),
     Project("tox", "https://github.com/tox-dev/tox.git"),
